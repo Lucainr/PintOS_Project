@@ -29,6 +29,18 @@ static bool too_many_loops (unsigned loops);
 static void busy_wait (int64_t loops);
 static void real_time_sleep (int64_t num, int32_t denom);
 
+
+//######################################################################
+static bool wakeup_less(const struct list_elem *a, 
+						const struct list_elem *b, void *aux){
+	struct thread* ta = list_entry(a, struct thread, elem);
+	struct thread* tb = list_entry(b, struct thread, elem);
+	return ta->wakeup < tb->wakeup;
+} // 내가 추가함
+static struct list sleep_list; // 내가 추가함
+// 슬립 리스트 만들어보자
+//######################################################################
+
 /* Sets up the 8254 Programmable Interval Timer (PIT) to
    interrupt PIT_FREQ times per second, and registers the
    corresponding interrupt. */
@@ -43,6 +55,8 @@ timer_init (void) {
 	outb (0x40, count >> 8);
 
 	intr_register_ext (0x20, timer_interrupt, "8254 Timer");
+	list_init (&sleep_list); // 슬립 리스트 추가
+
 }
 
 /* Calibrates loops_per_tick, used to implement brief delays. */
@@ -87,15 +101,29 @@ timer_elapsed (int64_t then) {
 	return timer_ticks () - then;
 }
 
+//######################################################################
 /* Suspends execution for approximately TICKS timer ticks. */
 void
 timer_sleep (int64_t ticks) {
+	if(ticks<=0){return;}
 	int64_t start = timer_ticks ();
+	struct thread *t = thread_current();
 
 	ASSERT (intr_get_level () == INTR_ON);
-	while (timer_elapsed (start) < ticks)
-		thread_yield ();
+
+	int64_t wakeup_tick = ticks + start;
+	t->wakeup = wakeup_tick;
+
+	enum intr_level old_level = intr_disable (); // 인터럽트 비활성화
+
+	list_insert_ordered (&sleep_list, &t->elem, wakeup_less, NULL);
+	
+	thread_block ();
+
+	intr_set_level (old_level); // 인터럽트 활성화
+
 }
+//######################################################################
 
 /* Suspends execution for approximately MS milliseconds. */
 void
@@ -125,7 +153,20 @@ timer_print_stats (void) {
 static void
 timer_interrupt (struct intr_frame *args UNUSED) {
 	ticks++;
+
+	while(!list_empty(&sleep_list)){
+		struct list_elem* el = list_begin(&sleep_list); 
+		struct thread* wku = list_entry(el, struct thread, elem);
+		if(wku->wakeup > ticks){
+			break;
+		}
+		else{
+			list_pop_front(&sleep_list);
+			thread_unblock(wku);
+		}
+	}
 	thread_tick ();
+
 }
 
 /* Returns true if LOOPS iterations waits for more than one timer
