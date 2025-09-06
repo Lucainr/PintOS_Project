@@ -154,6 +154,9 @@ static void
 timer_interrupt (struct intr_frame *args UNUSED) {
 	ticks++;
 
+	int current_pri = thread_current() -> priority;
+	bool condition = false;
+
 	while(!list_empty(&sleep_list)){
 		struct list_elem* el = list_begin(&sleep_list); 
 		struct thread* wku = list_entry(el, struct thread, elem);
@@ -163,7 +166,14 @@ timer_interrupt (struct intr_frame *args UNUSED) {
 		else{
 			list_pop_front(&sleep_list);
 			thread_unblock(wku);
+			if(wku -> priority > current_pri){
+				condition = true;
+			}
 		}
+	}
+
+	if(condition){
+		intr_yield_on_return();
 	}
 	thread_tick ();
 
