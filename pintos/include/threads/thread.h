@@ -91,8 +91,10 @@ struct thread {
 	enum thread_status status;          /* Thread state. */
 	char name[16];                      /* Name (for debugging purposes). */
 	int priority;                       /* Priority. */
-	int init_priority;					/*추가하라니까 추가하긴 하는데 왜??*/
+	int init_priority;					/* 락을 해제하기 위해 증가했던 우선순위를 다시 되돌리기 위해*/
 	int64_t wakeup;						/* 이거 내가 추가한건데 기상 시간 체크*/
+	struct list locks;					/* 내가 소유한 것으로 인해 누군가 나를 기다릴 수 있다는 것을 기록 */
+	struct lock* wait_on_lock;			/* 현재 어떤 락을 얻기 위해 대기(block)하고 있는지를 가리키는 포인터*/
 
 	/* Shared between thread.c and synch.c. */
 	struct list_elem elem;              /* List element. */
@@ -144,5 +146,9 @@ int thread_get_recent_cpu (void);
 int thread_get_load_avg (void);
 
 void do_iret (struct intr_frame *tf);
+
+void thread_update_priority(struct thread* t);
+struct thread *thread_ready_front();
+
 
 #endif /* threads/thread.h */

@@ -69,6 +69,7 @@ static bool ready_high(const struct list_elem *a,
 	struct thread* tb = list_entry(b, struct thread, elem);
 	return ta->priority > tb->priority;
 } // 내가 추가함
+void thread_update_priority(struct thread* t);
 //######################################################################
 
 /* Returns true if T appears to point to a valid thread. */
@@ -337,11 +338,11 @@ thread_set_priority (int new_priority) {
 
 	enum intr_level old_level;
 	bool need = false;
+	old_level = intr_disable ();
+
 	struct thread* cur = thread_current();
 	cur -> init_priority = new_priority;
-	cur -> priority = new_priority;
-
-	old_level = intr_disable ();
+	thread_update_priority(cur);
 
 	if(!list_empty(&ready_list)){
 		struct list_elem* e = list_front(&ready_list);
@@ -363,12 +364,30 @@ void thread_update_priority(struct thread* t){
 	// 1. 기본 우선순위를 바닥값으로 잡는다.
 	int prio = t -> init_priority;
 	// t가 보유 중인 모든 락(t->locks 리스트)을 순회
-
+	// 각 락의 waiter들 중 제일 큰 우선 순위를 찾는다.
+	// 그렇게 비교를 해가며  4.을 진행
+	struct list* list_lock = &t -> locks; // 쓰레드 t가 소유한 lock을 기록한 ㅣist
+	struct list_elem* e = list_begin(list_lock); // lock을 기록한 list의 첫번째 값
+	for(e; e != list_end(list_lock); e = list_next(e)){ // lock의 리스트의 tail이 되기 전까지 반복
+		struct lock* l = list_entry(e, struct lock, elem); // 락 ㅣdmf  
+		if(!list_empty(&l -> semaphore.waiters)){
+			struct list_elem* lf = list_front(&l->semaphore.waiters);
+			int prio_lf = list_entry(lf, struct thread, elem) -> priority;
+			if(prio_lf > prio){
+				prio = prio_lf;
+			}	 
+		}
+		else{
+			continue;
+		}
+	}
+	t -> priority = prio;
 	// 4. 최종적으로 t->priority = prio로 갱신
 
 	// 5. 정렬 유지 보정:
 		// 만약 t -> status == THREAD_READY 라면 우선 순위가 바뀌었으니 ready_list에서 위치를 재조정
 	if(t->status == THREAD_READY){
+		list_remove(&t -> elem);
 		list_insert_ordered (&ready_list, &t->elem, ready_high, NULL);
 	}
 		// 실행 중(THREAD_RUNNING)이라면 리스트에 없으니 여기선 건드리지 말고, 필요 시 바깥에서 양보 판단
@@ -377,13 +396,18 @@ void thread_update_priority(struct thread* t){
 }
 
 //###################################################################################################################
+struct thread * thread_ready_front(){
+	struct thread* t = list_entry(list_begin(&ready_list), struct thread, elem);
+	return t;
+}
+
 //###################################################################################################################
 
 
 /* Returns the current thread's priority. */
 int
 thread_get_priority (void) {
-	return thread_current ()->priority;
+	return thread_current () -> priority;
 }
 
 /* Sets the current thread's nice value to NICE. */
@@ -477,6 +501,8 @@ init_thread (struct thread *t, const char *name, int priority) {
 	t->init_priority = priority;
 	t->magic = THREAD_MAGIC;
 	t->wakeup = 0; // 내가 추가한 것임
+	t->wait_on_lock = NULL; // 이것도 내가 추가함
+	list_init(&t->locks); // 이건 새로 생성되는 스레드가 앞으로 획득하게 될 모든 락들을 추적할 리스트를 미리 초기화하기 위해
 }
 
 /* Chooses and returns the next thread to be scheduled.  Should

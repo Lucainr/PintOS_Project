@@ -32,6 +32,15 @@
 #include "threads/interrupt.h"
 #include "threads/thread.h"
 
+//######################################################################
+static bool ready_high(const struct list_elem *a, 
+						const struct list_elem *b, void *aux){
+	struct thread* ta = list_entry(a, struct thread, elem);
+	struct thread* tb = list_entry(b, struct thread, elem);
+	return ta->priority > tb->priority;
+} // 내가 추가함
+//######################################################################
+
 /* Initializes semaphore SEMA to VALUE.  A semaphore is a
    nonnegative integer along with two atomic operators for
    manipulating it:
@@ -66,7 +75,8 @@ sema_down (struct semaphore *sema) {
 
 	old_level = intr_disable ();
 	while (sema->value == 0) {
-		list_push_back (&sema->waiters, &thread_current ()->elem);
+		// list_push_back (&sema->waiters, &thread_current ()->elem);
+		list_insert_ordered (&sema->waiters, &thread_current ()->elem, ready_high, NULL);
 		thread_block ();
 	}
 	sema->value--;
@@ -105,15 +115,30 @@ sema_try_down (struct semaphore *sema) {
 void
 sema_up (struct semaphore *sema) {
 	enum intr_level old_level;
-
+	bool need = false;
 	ASSERT (sema != NULL);
+	struct thread* first_sema_waiter;
 
 	old_level = intr_disable ();
-	if (!list_empty (&sema->waiters))
-		thread_unblock (list_entry (list_pop_front (&sema->waiters),
-					struct thread, elem));
+	if (!list_empty (&sema->waiters)){
+		list_sort(&sema->waiters, ready_high, NULL);
+		first_sema_waiter = list_entry (list_pop_front (&sema->waiters), struct thread, elem);
+		thread_unblock (first_sema_waiter);
+		need = first_sema_waiter->priority > thread_current()->priority;
+	}
+	
 	sema->value++;
+
 	intr_set_level (old_level);
+
+	if(need){
+		if(intr_context()){
+			intr_yield_on_return();
+		}
+		else{
+			thread_yield();
+		}
+	}
 }
 
 static void sema_test_helper (void *sema_);
@@ -188,8 +213,32 @@ lock_acquire (struct lock *lock) {
 	ASSERT (!intr_context ());
 	ASSERT (!lock_held_by_current_thread (lock));
 
+	struct thread* cur = thread_current();
+	enum intr_level old_level = intr_disable (); // 인터럽트 비활성화
+
+	if(lock->holder != NULL){
+		cur -> wait_on_lock = lock;
+
+		struct lock* l = lock;
+		for(int depth = 0; depth < 8 && l && l -> holder; depth++){
+			struct thread *h = l -> holder;
+			if(h -> priority >= cur -> priority) break;
+
+			h -> priority = cur -> priority;
+			if(h -> status == THREAD_READY){
+				void thread_update_priority(h);
+			}
+			l = h -> wait_on_lock;
+		}
+	}
+	intr_set_level (old_level); // 인터럽트 활성화
 	sema_down (&lock->semaphore);
-	lock->holder = thread_current ();
+
+	enum intr_level old_level2 = intr_disable (); // 인터럽트 비활성화
+	cur -> wait_on_lock = NULL;
+	lock->holder = cur;
+	list_push_back(&cur -> locks, &lock -> elem);
+	intr_set_level (old_level2); // 인터럽트 활성화
 }
 
 /* Tries to acquires LOCK and returns true if successful or false
@@ -221,9 +270,22 @@ void
 lock_release (struct lock *lock) {
 	ASSERT (lock != NULL);
 	ASSERT (lock_held_by_current_thread (lock));
-
+	struct thread* cur = thread_current();
+	enum intr_level old_level = intr_disable (); // 인터럽트 비활성화
+	
+	list_remove(&lock -> elem);
 	lock->holder = NULL;
+	cur -> priority = cur -> init_priority;
+	thread_update_priority(cur);
+
 	sema_up (&lock->semaphore);
+	intr_set_level (old_level); // 인터럽트 활성화
+
+
+	if (thread_ready_front() -> priority > cur -> priority){
+		thread_yield();
+	}
+
 }
 
 /* Returns true if the current thread holds LOCK, false
@@ -283,6 +345,7 @@ cond_wait (struct condition *cond, struct lock *lock) {
 
 	sema_init (&waiter.semaphore, 0);
 	list_push_back (&cond->waiters, &waiter.elem);
+//	list_insert_ordered (&cond->waiters, &waiter.elem, ready_high, NULL);
 	lock_release (lock);
 	sema_down (&waiter.semaphore);
 	lock_acquire (lock);
@@ -301,10 +364,37 @@ cond_signal (struct condition *cond, struct lock *lock UNUSED) {
 	ASSERT (lock != NULL);
 	ASSERT (!intr_context ());
 	ASSERT (lock_held_by_current_thread (lock));
+	int prio = -1;
 
-	if (!list_empty (&cond->waiters))
-		sema_up (&list_entry (list_pop_front (&cond->waiters),
-					struct semaphore_elem, elem)->semaphore);
+	enum intr_level old_level = intr_disable (); // 인터럽트 비활성화
+
+	if (!list_empty (&cond->waiters)){
+		struct list_elem* e = list_begin(&cond -> waiters);
+		struct list_elem* best_e = NULL;
+		for(e; e != list_end(&cond -> waiters); e = list_next(e)){
+			struct semaphore_elem* se = list_entry(e, struct semaphore_elem, elem);
+			if(list_empty(&se -> semaphore.waiters)) continue;
+			struct thread* w = list_entry(list_front(&se -> semaphore.waiters), struct thread, elem);
+			if(w -> priority > prio){
+				prio = w -> priority;
+				best_e = e;
+			}
+		}
+		if(best_e != NULL){
+		list_remove(best_e);
+		intr_set_level (old_level); // 인터럽트 활성화
+
+		struct semaphore_elem* best = list_entry(best_e, struct semaphore_elem, elem);
+		sema_up (&best -> semaphore);
+
+		return;
+		}
+		
+	}
+
+	intr_set_level (old_level); // 인터럽트 활성화
+	
+
 }
 
 /* Wakes up all threads, if any, waiting on COND (protected by
