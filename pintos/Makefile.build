@@ -3,7 +3,7 @@
 SRCDIR = ../..
 
 all: os.dsk
-
+export PATH := $(SRCDIR)/utils:$(PATH)
 include ../../Make.config
 include ../Make.vars
 include ../../tests/Make.tests
