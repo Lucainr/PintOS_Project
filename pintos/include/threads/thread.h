@@ -91,6 +91,7 @@ struct thread {
 	enum thread_status status;          /* Thread state. */
 	char name[16];                      /* Name (for debugging purposes). */
 	int priority;                       /* Priority. */
+	int init_priority;					/*추가하라니까 추가하긴 하는데 왜??*/
 	int64_t wakeup;						/* 이거 내가 추가한건데 기상 시간 체크*/
 
 	/* Shared between thread.c and synch.c. */

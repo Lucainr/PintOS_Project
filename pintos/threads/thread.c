@@ -215,6 +215,10 @@ thread_create (const char *name, int priority,
 	/* Add to run queue. */
 	thread_unblock (t);
 
+	if (t->priority > thread_current()->priority){
+		thread_yield();
+	}
+
 	return tid;
 }
 
@@ -245,7 +249,7 @@ thread_unblock (struct thread *t) {
 	enum intr_level old_level;
 
 	ASSERT (is_thread (t));
-	bool high;
+	bool high = false;
 	struct list_elem* e;
 
 	old_level = intr_disable ();
@@ -326,13 +330,55 @@ thread_yield (void) {
 	do_schedule (THREAD_READY);
 	intr_set_level (old_level);
 }
-
+//###################################################################################################################
 /* Sets the current thread's priority to NEW_PRIORITY. */
 void
 thread_set_priority (int new_priority) {
-	thread_current ()->priority = new_priority;
+
+	enum intr_level old_level;
+	bool need = false;
+	struct thread* cur = thread_current();
+	cur -> init_priority = new_priority;
+	cur -> priority = new_priority;
+
+	old_level = intr_disable ();
+
+	if(!list_empty(&ready_list)){
+		struct list_elem* e = list_front(&ready_list);
+		struct thread* t = list_entry(e, struct thread, elem);
+		need = (cur->priority < t->priority);
+	}
+	
+	intr_set_level (old_level);
+
+	if(need){
+		thread_yield ();
+	}
 
 }
+//###################################################################################################################
+void thread_update_priority(struct thread* t){
+	enum intr_level old_level;
+	old_level = intr_disable ();
+	// 1. 기본 우선순위를 바닥값으로 잡는다.
+	int prio = t -> init_priority;
+	// t가 보유 중인 모든 락(t->locks 리스트)을 순회
+
+	// 4. 최종적으로 t->priority = prio로 갱신
+
+	// 5. 정렬 유지 보정:
+		// 만약 t -> status == THREAD_READY 라면 우선 순위가 바뀌었으니 ready_list에서 위치를 재조정
+	if(t->status == THREAD_READY){
+		list_insert_ordered (&ready_list, &t->elem, ready_high, NULL);
+	}
+		// 실행 중(THREAD_RUNNING)이라면 리스트에 없으니 여기선 건드리지 말고, 필요 시 바깥에서 양보 판단
+
+	intr_set_level (old_level);
+}
+
+//###################################################################################################################
+//###################################################################################################################
+
 
 /* Returns the current thread's priority. */
 int
@@ -428,6 +474,7 @@ init_thread (struct thread *t, const char *name, int priority) {
 	strlcpy (t->name, name, sizeof t->name);
 	t->tf.rsp = (uint64_t) t + PGSIZE - sizeof (void *);
 	t->priority = priority;
+	t->init_priority = priority;
 	t->magic = THREAD_MAGIC;
 	t->wakeup = 0; // 내가 추가한 것임
 }
@@ -589,6 +636,9 @@ schedule (void) {
 		if (curr && curr->status == THREAD_DYING && curr != initial_thread) {
 			ASSERT (curr != next);
 			list_push_back (&destruction_req, &curr->elem);
+			
+			//list_insert_ordered (&ready_list, &t->elem, ready_high, NULL);
+
 		}
 
 		/* Before switching the thread, we first save the information
