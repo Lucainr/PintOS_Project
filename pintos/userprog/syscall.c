@@ -5,6 +5,7 @@
 #include "threads/loader.h"
 #include "threads/thread.h"
 #include "userprog/gdt.h"
+#include <lib/kernel/stdio.h>
 #include <stdio.h>
 #include <syscall-nr.h>
 
@@ -41,6 +42,14 @@ void syscall_init(void)
 void syscall_handler(struct intr_frame *f UNUSED)
 {
     // TODO: Your implementation goes here.
+    // SYS_WRIT
+    if (f->R.rax == SYS_WRITE)
+    { // fd, buffer, size
+        if (f->R.rdi == 1)
+        {
+            putbuf(f->R.rsi, f->R.rdx);
+        }
+    } // 사용자 프로세스가 printf를 쓸 수 있다.
     printf("system call!\n");
-    thread_exit();
+    // thread_exit();
 }

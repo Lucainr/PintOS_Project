@@ -3,7 +3,10 @@
         "timer.h": "c",
         "string.h": "c",
         "thread.h": "c",
-        "directory.h": "c"
+        "directory.h": "c",
+        "syscall-nr.h": "c",
+        "malloc.h": "c",
+        "stddef.h": "c"
     },
 
     "C_Cpp.clang_format_style": "file",

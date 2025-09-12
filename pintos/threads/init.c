@@ -68,13 +68,13 @@ int main(void)
 {
     uint64_t mem_end;
     char **argv;
-
+    printf("안녕하세요");
     /* Clear BSS and get machine's RAM size. */
     bss_init();
 
     /* Break command line into arguments and parse options. */
     argv = read_command_line();
-    argv = parse_options(argv);
+    argv = parse_options(argv); // 인자분리
 
     /* Initialize ourselves as a thread so we can use locks,
        then enable console locking. */
@@ -82,9 +82,9 @@ int main(void)
     console_init();
 
     /* Initialize memory system. */
-    mem_end = palloc_init();
-    malloc_init();
-    paging_init(mem_end);
+    mem_end = palloc_init(); // 페이지단위 할당기, 프로세스단위
+    malloc_init();           // 페이지 안에서 힙영역 할당기
+    paging_init(mem_end);    // 이제 물리메모리랑 매핑
 
 #ifdef USERPROG
     tss_init();
