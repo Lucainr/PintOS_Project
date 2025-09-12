@@ -21,7 +21,7 @@ enum thread_status
 /* Thread identifier type.
    You can redefine this to whatever type you like. */
 typedef int tid_t;
-#define TID_ERROR ((tid_t)-1) /* Error value for tid_t. */
+#define TID_ERROR ((tid_t) - 1) /* Error value for tid_t. */
 
 /* Thread priorities. */
 #define PRI_MIN 0      /* Lowest priority. */
@@ -112,6 +112,7 @@ struct thread
     int niceness;
     int recent_cpu;
     struct list_elem all_elem;
+    // uint64_t *pml4;
 
 #ifdef USERPROG
     /* Owned by userprog/process.c. */
