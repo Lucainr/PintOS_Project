@@ -8,6 +8,7 @@
 #include <lib/kernel/stdio.h>
 #include <stdio.h>
 #include <syscall-nr.h>
+#include <userprog/process.h>
 
 void syscall_entry(void);
 void syscall_handler(struct intr_frame *);
@@ -50,6 +51,11 @@ void syscall_handler(struct intr_frame *f UNUSED)
             putbuf(f->R.rsi, f->R.rdx);
         }
     } // 사용자 프로세스가 printf를 쓸 수 있다.
+
+    if (f->R.rax == SYS_EXIT)
+    {
+        // process_exitt((int)f->R.rdi);
+    }
     printf("system call!\n");
     // thread_exit();
 }
