@@ -686,7 +686,14 @@ static struct thread *next_thread_to_run(void)
 
 /* Use iretq to launch the thread */
 void do_iret(struct intr_frame *tf)
-{
+{ /*
+     1. RIP (유저 코드 시작 주소) 로 점프
+     2.	CS (Code Segment) 로 권한 레벨(Ring) 바꿈 → 커널(Ring 0) → 유저(Ring 3)
+     3.	RSP (유저 스택 포인터) 로 스택 교체
+     4.	SS (스택 세그먼트) 도 유저용으로 교체
+     5.	RFLAGS 도 복구 (인터럽트 플래그 등 상태 반영)
+     */
+
     __asm __volatile("movq %0, %%rsp\n"
                      "movq 0(%%rsp),%%r15\n"
                      "movq 8(%%rsp),%%r14\n"

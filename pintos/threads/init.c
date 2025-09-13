@@ -237,15 +237,15 @@ static char **parse_options(char **argv)
 }
 
 /* Runs the task specified in ARGV[1]. */
-static void run_task(char **argv)
+static void run_task(char **argv) // 테스트가 들어옴
 {
-    const char *task = argv[1];
+    const char *task = argv[1]; // pintos -- run args-none
 
     printf("Executing '%s':\n", task);
 #ifdef USERPROG
     if (thread_tests)
     {
-        run_test(task);
+        run_test(task); // 테스트실행함수
     }
     else
     {
@@ -280,26 +280,27 @@ static void run_actions(char **argv)
     };
 
     while (*argv != NULL)
+    // run echo ls cat foo
     {
         const struct action *a;
         int i;
 
         /* Find action name. */
-        for (a = actions;; a++)
+        for (a = actions;; a++) // 이건 actions를 도는 루프. 현재는 run만 있음
             if (a->name == NULL)
                 PANIC("unknown action `%s' (use -h for help)", *argv);
             else if (!strcmp(*argv, a->name))
                 break;
 
         /* Check for required arguments. */
-        for (i = 1; i < a->argc; i++)
+        for (i = 1; i < a->argc; i++) // 명령-1 인자를  원한다.
             if (argv[i] == NULL)
                 PANIC("action `%s' requires %d argument(s)", *argv,
                       a->argc - 1);
 
         /* Invoke action and advance. */
         a->function(argv);
-        argv += a->argc;
+        argv += a->argc; // 인자를 넘어간 부분으로 점프
     }
 }
 
