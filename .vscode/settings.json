@@ -6,7 +6,12 @@
         "directory.h": "c",
         "syscall-nr.h": "c",
         "malloc.h": "c",
-        "stddef.h": "c"
+        "stddef.h": "c",
+        "gdt.h": "c",
+        "syscall.h": "c",
+        "stdio.h": "c",
+        "cstdlib": "c",
+        "process.h": "c"
     },
 
     "C_Cpp.clang_format_style": "file",

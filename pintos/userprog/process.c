@@ -345,11 +345,13 @@ static bool load(const char *file_name, struct intr_frame *if_) // echo 1 2
         goto done;
     process_activate(thread_current());
 
+    char *save;
+    char *prog_name = strtok_r(file_name, " ", &save); // 파일이름분리
     /* Open executable file. */
-    file = filesys_open(file_name);
+    file = filesys_open(prog_name);
     if (file == NULL)
     {
-        printf("load: %s: open failed\n", file_name);
+        printf("load: %s: open failed\n", prog_name);
         goto done;
     }
 
@@ -360,7 +362,7 @@ static bool load(const char *file_name, struct intr_frame *if_) // echo 1 2
         || ehdr.e_version != 1 || ehdr.e_phentsize != sizeof(struct Phdr) ||
         ehdr.e_phnum > 1024)
     {
-        printf("load: %s: error loading executable\n", file_name);
+        printf("load: %s: error loading executable\n", prog_name);
         goto done;
     }
 
@@ -429,31 +431,48 @@ static bool load(const char *file_name, struct intr_frame *if_) // echo 1 2
 
     /* Start address. */
     if_->rip = ehdr.e_entry;
-    // hexa dump
-    // parse
+
     // char *strtok_r(char *str, const char *delim, char **saveptr);
-    char *save, *token;
+    char *token;
     uint64_t *addr[32];                 // 일단 32개만잡자인자
     uint8_t *ptr = (uint8_t *)if_->rsp; // 1바이트 단위 포인터
     int argc = 0;
+    uint64_t *argv_addr;
 
-    for (token = strtok_r("echo 1 2", " ", &save); token != NULL;
-         token = strtok_r(NULL, " ", &save))
+    for (token = prog_name; token != NULL; token = strtok_r(NULL, " ", &save))
     {
         int len = strlen(token);
         ptr -= (len + 1);
         memcpy(ptr, token, len + 1);
-        addr[++argc] = (uint64_t *)ptr;
-        printf("str = %s, size = %d byte\n", token, len + 1);
-        // → "1"
+        addr[argc++] = (uint64_t *)ptr;
+        printf("몇번찍혔나?");
     }
-    // hex_dump()
-    /* TODO: Your code goes here.
-     * TODO: Implement argument passing (see
-     * project2/argument_passing.html). */
-    // if_->rsp;
-    success = true;
 
+    ptr = (uint8_t *)((uintptr_t)ptr & ~0xF); // align
+
+    ptr -= 8;
+    *(uint64_t *)ptr = 0; // 마지막인자 0
+
+    for (int i = argc - 1; i >= 0; i--)
+    {
+        ptr -= 8;
+        *(uint64_t *)ptr = (uint64_t *)addr[i];
+    }
+    argv_addr = (uint64_t *)ptr;
+
+    ptr -= 8;
+    *(uint64_t *)ptr = 0; // fake address
+    if_->R.rsi = (uint64_t)argv_addr;
+    if_->R.rdi = argc;
+    if_->rsp = (uint64_t)ptr;
+
+    success = true;
+    size_t avail = (size_t)((uintptr_t)USER_STACK - if_->rsp);
+    size_t n = 128; // 보고 싶은 바이트 수 (원래 네가 쓰던 값)
+    if (n > avail)
+        n = avail; // 경계 넘지 않게 캡
+
+    hex_dump((uintptr_t)if_->rsp, (void *)if_->rsp, n, true);
 done:
     /* We arrive here whether the load is successful or not. */
     file_close(file);
