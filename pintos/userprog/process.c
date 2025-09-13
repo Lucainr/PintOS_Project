@@ -3,6 +3,7 @@
 #include "filesys/file.h"
 #include "filesys/filesys.h"
 #include "intrinsic.h"
+#include "lib/stdio.h" // hex_dump
 #include "threads/flags.h"
 #include "threads/init.h"
 #include "threads/interrupt.h"
@@ -64,7 +65,9 @@ static void initd(void *f_name)
     supplemental_page_table_init(&thread_current()->spt);
 #endif
 
-    process_init();
+    process_init(); // 현재스레드를 프로세스로서 준비하는 함수.
+    // Pintos에서는 프로세스 = 스레드 1개 + 별도의 주소 공간
+    // 아직 ELF로딩 안함
 
     if (process_exec(f_name) < 0)
         PANIC("Fail to launch initd\n");
@@ -174,7 +177,7 @@ int process_exec(void *f_name)
     _if.eflags = FLAG_IF | FLAG_MBS;
 
     /* We first kill the current context */
-    process_cleanup();
+    process_cleanup(); // 안에있는 옛 데이터 초기화
 
     /* And then load the binary */
     success = load(file_name, &_if);
@@ -326,8 +329,9 @@ static bool load_segment(struct file *file, off_t ofs, uint8_t *upage,
  * Stores the executable's entry point into *RIP
  * and its initial stack pointer into *RSP.
  * Returns true if successful, false otherwise. */
-static bool load(const char *file_name, struct intr_frame *if_)
+static bool load(const char *file_name, struct intr_frame *if_) // echo 1 2
 {
+    // intr_frame은 유저프로그램을 시작하기전에 cpu 레지스터를 세팅
     struct thread *t = thread_current();
     struct ELF ehdr;
     struct file *file = NULL;
@@ -426,9 +430,28 @@ static bool load(const char *file_name, struct intr_frame *if_)
     /* Start address. */
     if_->rip = ehdr.e_entry;
     // hexa dump
-    /* TODO: Your code goes here.
-     * TODO: Implement argument passing (see project2/argument_passing.html). */
+    // parse
+    // char *strtok_r(char *str, const char *delim, char **saveptr);
+    char *save, *token;
+    uint64_t *addr[32];                 // 일단 32개만잡자인자
+    uint8_t *ptr = (uint8_t *)if_->rsp; // 1바이트 단위 포인터
+    int argc = 0;
 
+    for (token = strtok_r("echo 1 2", " ", &save); token != NULL;
+         token = strtok_r(NULL, " ", &save))
+    {
+        int len = strlen(token);
+        ptr -= (len + 1);
+        memcpy(ptr, token, len + 1);
+        addr[++argc] = (uint64_t *)ptr;
+        printf("str = %s, size = %d byte\n", token, len + 1);
+        // → "1"
+    }
+    // hex_dump()
+    /* TODO: Your code goes here.
+     * TODO: Implement argument passing (see
+     * project2/argument_passing.html). */
+    // if_->rsp;
     success = true;
 
 done:
