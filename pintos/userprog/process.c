@@ -9,7 +9,7 @@
 #include "threads/interrupt.h"
 #include "threads/mmu.h"
 #include "threads/palloc.h"
-#include "threads/thread.h"
+#include "threads/synch.h"
 #include "threads/vaddr.h"
 #include "userprog/gdt.h"
 #include "userprog/tss.h"
@@ -27,6 +27,9 @@ static void process_cleanup(void);
 static bool load(const char *file_name, struct intr_frame *if_);
 static void initd(void *f_name);
 static void __do_fork(void *);
+static struct semaphore test_sema;
+static int exit_status = -1;
+extern bool thread_tests;
 
 /* General process initializer for initd and other process. */
 static void process_init(void)
@@ -44,6 +47,10 @@ tid_t process_create_initd(const char *file_name)
     char *fn_copy;
     tid_t tid;
 
+    if (!thread_tests) // 스레드테스트가 아니라면
+    {
+        sema_init(&test_sema, 0);
+    }
     /* Make a copy of FILE_NAME.
      * Otherwise there's a race between the caller and load(). */
     fn_copy = palloc_get_page(0);
@@ -206,7 +213,11 @@ int process_wait(tid_t child_tid UNUSED)
     /* XXX: Hint) The pintos exit if process_wait (initd), we recommend you
      * XXX:       to add infinite loop here before
      * XXX:       implementing the process_wait. */
-    while (true)
+    if (!thread_tests) // 스레드테스트가 아니라면
+    {
+        sema_down(&test_sema);
+    }
+    for (int j = 0; j < 1000; j++)
     {
     }
 
@@ -221,6 +232,10 @@ void process_exit(void)
      * TODO: Implement process termination message (see
      * TODO: project2/process_termination.html).
      * TODO: We recommend you to implement process resource cleanup here. */
+    if (!thread_tests) // 스레드테스트가 아니라면
+    {
+        sema_up(&test_sema);
+    }
 
     process_cleanup();
 }
@@ -347,7 +362,8 @@ static bool load(const char *file_name, struct intr_frame *if_) // echo 1 2
 
     char *save;
     char *prog_name = strtok_r(file_name, " ", &save); // 파일이름분리
-    /* Open executable file. */
+    strlcpy(thread_current()->name, prog_name,
+            sizeof thread_current()->name); /* 버퍼 오버플로우 방지 */
     file = filesys_open(prog_name);
     if (file == NULL)
     {
@@ -445,7 +461,6 @@ static bool load(const char *file_name, struct intr_frame *if_) // echo 1 2
         ptr -= (len + 1);
         memcpy(ptr, token, len + 1);
         addr[argc++] = (uint64_t *)ptr;
-        printf("몇번찍혔나?");
     }
 
     ptr = (uint8_t *)((uintptr_t)ptr & ~0xF); // align
@@ -467,12 +482,12 @@ static bool load(const char *file_name, struct intr_frame *if_) // echo 1 2
     if_->rsp = (uint64_t)ptr;
 
     success = true;
-    size_t avail = (size_t)((uintptr_t)USER_STACK - if_->rsp);
-    size_t n = 128; // 보고 싶은 바이트 수 (원래 네가 쓰던 값)
-    if (n > avail)
-        n = avail; // 경계 넘지 않게 캡
+    // size_t avail = (size_t)((uintptr_t)USER_STACK - if_->rsp);
+    // size_t n = 128; // 보고 싶은 바이트 수 (원래 네가 쓰던 값)
+    // if (n > avail)
+    //     n = avail; // 경계 넘지 않게 캡
 
-    hex_dump((uintptr_t)if_->rsp, (void *)if_->rsp, n, true);
+    // hex_dump((uintptr_t)if_->rsp, (void *)if_->rsp, n, true);
 done:
     /* We arrive here whether the load is successful or not. */
     file_close(file);

@@ -44,6 +44,7 @@ void syscall_handler(struct intr_frame *f UNUSED)
 {
     // TODO: Your implementation goes here.
     // SYS_WRIT
+    // printf("system call!: %lld\n", f->R.rax);
     if (f->R.rax == SYS_WRITE)
     { // fd, buffer, size
         if (f->R.rdi == 1)
@@ -54,8 +55,15 @@ void syscall_handler(struct intr_frame *f UNUSED)
 
     if (f->R.rax == SYS_EXIT)
     {
-        // process_exitt((int)f->R.rdi);
+        int status = (int)f->R.rdi;
+        exit(status);
     }
-    printf("system call!\n");
-    // thread_exit();
+}
+
+void exit(int status)
+{
+    // 종료 메시지 출력: "<프로세스이름>: exit(<상태코드>)"
+    printf("%s: exit(%d)\n", thread_current()->name, status);
+    // 현재 스레드 종료
+    thread_exit();
 }
