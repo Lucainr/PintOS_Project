@@ -27,6 +27,9 @@ static void process_cleanup(void);
 static bool load(const char *file_name, struct intr_frame *if_);
 static void initd(void *f_name);
 static void __do_fork(void *);
+static int parse_args(char *cmdline, char **argv);
+static void setup_stack_args(struct intr_frame *if_, char **argv, int argc);
+static void print_dump(struct intr_frame *if_, size_t view_byte);
 static struct semaphore test_sema;
 static int exit_status = -1;
 extern bool thread_tests;
@@ -353,6 +356,7 @@ static bool load(const char *file_name, struct intr_frame *if_) // echo 1 2
     off_t file_ofs;
     bool success = false;
     int i;
+    uint64_t *addr[32]; // 인자를 저장할 문자열집합
 
     /* Allocate and activate page directory. */
     t->pml4 = pml4_create();
@@ -360,14 +364,15 @@ static bool load(const char *file_name, struct intr_frame *if_) // echo 1 2
         goto done;
     process_activate(thread_current());
 
-    char *save;
-    char *prog_name = strtok_r(file_name, " ", &save); // 파일이름분리
-    strlcpy(thread_current()->name, prog_name,
-            sizeof thread_current()->name); /* 버퍼 오버플로우 방지 */
-    file = filesys_open(prog_name);
+    int argc = parse_args(file_name, addr);
+
+    strlcpy(thread_current()->name, addr[0],
+            sizeof thread_current()->name); /* 버퍼 오버플로우 방지용 */
+
+    file = filesys_open(addr[0]);
     if (file == NULL)
     {
-        printf("load: %s: open failed\n", prog_name);
+        printf("load: %s: open failed\n", addr[0]);
         goto done;
     }
 
@@ -378,7 +383,7 @@ static bool load(const char *file_name, struct intr_frame *if_) // echo 1 2
         || ehdr.e_version != 1 || ehdr.e_phentsize != sizeof(struct Phdr) ||
         ehdr.e_phnum > 1024)
     {
-        printf("load: %s: error loading executable\n", prog_name);
+        printf("load: %s: error loading executable\n", addr[0]);
         goto done;
     }
 
@@ -448,19 +453,51 @@ static bool load(const char *file_name, struct intr_frame *if_) // echo 1 2
     /* Start address. */
     if_->rip = ehdr.e_entry;
 
-    // char *strtok_r(char *str, const char *delim, char **saveptr);
-    char *token;
-    uint64_t *addr[32];                 // 일단 32개만잡자인자
-    uint8_t *ptr = (uint8_t *)if_->rsp; // 1바이트 단위 포인터
-    int argc = 0;
-    uint64_t *argv_addr;
+    setup_stack_args(if_, addr, argc);
 
-    for (token = prog_name; token != NULL; token = strtok_r(NULL, " ", &save))
+    success = true;
+    // print_dump(if_, 128);
+done:
+    /* We arrive here whether the load is successful or not. */
+    file_close(file);
+    return success;
+}
+
+static void print_dump(struct intr_frame *if_, size_t view_byte)
+{
+    size_t avail = (size_t)((uintptr_t)USER_STACK - if_->rsp);
+    size_t n = view_byte; // 보고 싶은 바이트 수 (원래 네가 쓰던 값)
+    if (n > avail)
+        n = avail; // 경계 넘지 않게 캡
+
+    hex_dump((uintptr_t)if_->rsp, (void *)if_->rsp, n, true);
+}
+
+// "argument-test 1 2 3 4" → ["argument-test", "1", "2", "3", "4"]
+static int parse_args(char *cmdline, char **argv)
+{
+    int argc = 0;
+    char *token, *save_ptr;
+    for (token = strtok_r(cmdline, " ", &save_ptr); token != NULL;
+         token = strtok_r(NULL, " ", &save_ptr))
     {
-        int len = strlen(token);
+        argv[argc++] = token;
+    }
+    return argc;
+}
+
+static void setup_stack_args(struct intr_frame *if_, char **argv, int argc)
+{
+    uint8_t *ptr = (uint8_t *)if_->rsp; // 1바이트 단위 포인터
+    uint64_t *addr[32];                 // 일단 32개만잡자인자
+
+    // 1. 문자열들 복사
+    for (int i = argc - 1; i >= 0; i--)
+    {
+        int len = strlen(argv[i]);
         ptr -= (len + 1);
-        memcpy(ptr, token, len + 1);
-        addr[argc++] = (uint64_t *)ptr;
+        memcpy(ptr, argv[i], len + 1);
+        addr[i] = (uint64_t *)ptr;
     }
 
     ptr = (uint8_t *)((uintptr_t)ptr & ~0xF); // align
@@ -473,25 +510,12 @@ static bool load(const char *file_name, struct intr_frame *if_) // echo 1 2
         ptr -= 8;
         *(uint64_t *)ptr = (uint64_t *)addr[i];
     }
-    argv_addr = (uint64_t *)ptr;
 
     ptr -= 8;
     *(uint64_t *)ptr = 0; // fake address
-    if_->R.rsi = (uint64_t)argv_addr;
+    if_->R.rsi = (uint64_t)(ptr + 8);
     if_->R.rdi = argc;
     if_->rsp = (uint64_t)ptr;
-
-    success = true;
-    // size_t avail = (size_t)((uintptr_t)USER_STACK - if_->rsp);
-    // size_t n = 128; // 보고 싶은 바이트 수 (원래 네가 쓰던 값)
-    // if (n > avail)
-    //     n = avail; // 경계 넘지 않게 캡
-
-    // hex_dump((uintptr_t)if_->rsp, (void *)if_->rsp, n, true);
-done:
-    /* We arrive here whether the load is successful or not. */
-    file_close(file);
-    return success;
 }
 
 /* Checks whether PHDR describes a valid, loadable segment in
