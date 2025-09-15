@@ -15,6 +15,7 @@
 #include "threads/interrupt.h"
 #include "threads/palloc.h"
 #include "threads/thread.h"
+#include "threads/synch.h"
 #include "threads/mmu.h"
 #include "threads/vaddr.h"
 #include "intrinsic.h"
@@ -22,10 +23,22 @@
 #include "vm/vm.h"
 #endif
 
+#define MAX_ARGS 128
+
 static void process_cleanup (void);
 static bool load (const char *file_name, struct intr_frame *if_);
 static void initd (void *f_name);
 static void __do_fork (void *);
+static int parse_args(char *, char *[]);
+static void argument_stack(char *argv[], int argc, struct intr_frame *_if);
+
+/* 초기 사용자 프로세스를 위한 최소한의 동기화.
+   이것은 커널이 첫 번째 사용자 프로세스가 종료될 때까지
+   대기하도록 보장하기 위한 임시 메커니즘으로,
+   테스트에서 사용자 출력을 관찰할 수 있게 한다. */
+static struct semaphore initd_sema;
+// extern → 다른 파일에 정의된 전역 변수를 여기서 참조하겠다는 의미
+extern bool thread_tests; /* threads/init.c 파일 안에서 정의되어 있다 */
 
 /* General process initializer for initd and other process. */
 static void
@@ -33,31 +46,38 @@ process_init (void) {
 	struct thread *current = thread_current ();
 }
 
-/* Starts the first userland program, called "initd", loaded from FILE_NAME.
- * The new thread may be scheduled (and may even exit)
- * before process_create_initd() returns. Returns the initd's
- * thread id, or TID_ERROR if the thread cannot be created.
- * Notice that THIS SHOULD BE CALLED ONCE. */
+/* FILE_NAME에서 불러온 "initd"라는 첫 번째 사용자 프로그램을 시작한다.
+ * 새 스레드는 process_create_initd()가 반환되기 전에
+ * 스케줄될 수도 있고(심지어 종료될 수도 있다).
+ * initd의 스레드 ID를 반환하며, 스레드를 생성할 수 없는 경우 TID_ERROR를 반환한다.
+ * 참고: 이 함수는 반드시 한 번만 호출되어야 한다. */
 tid_t
 process_create_initd (const char *file_name) {
 	char *fn_copy;
 	tid_t tid;
 
-	/* Make a copy of FILE_NAME.
-	 * Otherwise there's a race between the caller and load(). */
-	fn_copy = palloc_get_page (0);
+    /* Initialize minimal wait synchronization for initd.
+       Only meaningful in userprog mode (not threads tests). */
+    if (!thread_tests) {
+        sema_init(&initd_sema, 0);
+    }
+
+    /* FILE_NAME의 복사본을 만든다.
+     * 그렇지 않으면 호출자와 load() 사이에 경쟁 상태(race)가 발생할 수 있다. */
+	fn_copy = palloc_get_page (0); // 0의 의미는 Kernel 쪽에서 만들어라 라는 뜻
+	// fn_copy는 file_name의 복사본. 즉, args-single onearg
 	if (fn_copy == NULL)
 		return TID_ERROR;
 	strlcpy (fn_copy, file_name, PGSIZE);
 
-	/* Create a new thread to execute FILE_NAME. */
+	/* FILE_NAME을 실행할 새로운 스레드를 생성한다. */
 	tid = thread_create (file_name, PRI_DEFAULT, initd, fn_copy);
 	if (tid == TID_ERROR)
 		palloc_free_page (fn_copy);
 	return tid;
 }
 
-/* A thread function that launches first user process. */
+/* 첫 번째 사용자 프로세스를 실행하는 스레드 함수 */
 static void
 initd (void *f_name) {
 #ifdef VM
@@ -65,8 +85,8 @@ initd (void *f_name) {
 #endif
 
 	process_init ();
-
-	if (process_exec (f_name) < 0)
+	// process_exec()에서 initd(fn_copy)로 넘어왔던 fn_copy가 f_name임 args_single onearg
+	if (process_exec (f_name) < 0)	
 		PANIC("Fail to launch initd\n");
 	NOT_REACHED ();
 }
@@ -158,65 +178,100 @@ error:
 	thread_exit ();
 }
 
-/* Switch the current execution context to the f_name.
- * Returns -1 on fail. */
+/* 현재 실행 컨텍스트를 f_name으로 전환한다.
+ * 실패하면 -1을 반환한다. */
 int
 process_exec (void *f_name) {
-	char *file_name = f_name;
+	// 최대 MAX_ARGS 개수 만큼의 인자들을 저장할 배열 선언
+	char *argv[MAX_ARGS];
+	// f_name은 "실행파일명과 인자1 인자2 ..." 형태의 문자열임
+	// 이를 공백 기준으로 파싱하여 argv에 저장하고 argc에 개수를 저장
+	int argc = parse_args(f_name, argv);
+
 	bool success;
 
-	/* We cannot use the intr_frame in the thread structure.
-	 * This is because when current thread rescheduled,
-	 * it stores the execution information to the member. */
+   /* thread 구조체 안에 있는 intr_frame은 사용할 수 없다.
+	* 그 이유는 현재 스레드가 리스케줄(reschedule)될 때,
+	* 실행 정보가 그 멤버에 저장되기 때문이다. */
 	struct intr_frame _if;
 	_if.ds = _if.es = _if.ss = SEL_UDSEG;
 	_if.cs = SEL_UCSEG;
 	_if.eflags = FLAG_IF | FLAG_MBS;
 
-	/* We first kill the current context */
+	/* 먼저 현재 컨텍스트를 종료한다.
+	 * 열린 파일 닫기
+	 * 페이지 테이블 해제
+	 * 유저 스택 정리 등
+	 */
 	process_cleanup ();
 
-	/* And then load the binary */
-	success = load (file_name, &_if);
+	// 파일 이름 Parsing 결과의 첫번째 토큰은 실제 실행할 파일 이름임
+	ASSERT(argv[0] != NULL);
 
-	/* If load failed, quit. */
-	palloc_free_page (file_name);
-	if (!success)
-		return -1;
+	/* 스레드 이름도 실제 실행 파일 이름으로 업데이트하여
+	 * 종료 메시지 등에서 프로그램명이 올바르게 출력되도록 한다. */
+	strlcpy(thread_current()->name, argv[0], sizeof thread_current()->name);
 
-	/* Start switched process. */
+	/* 그리고 나서 바이너리를 적재한다. - ELF load
+	 * 이미 컴파일되어 있는 실행파일(binary file)을 메모리에 불러와 실행 준비를 한다. */
+    // Load the executable by file name only (not the whole command line).
+    success = load (argv[0], &_if);
+
+    /* If load failed, free f_name and quit. */
+    if (!success) {
+        palloc_free_page (f_name);
+        return -1;
+    }
+	
+    argument_stack(argv, argc, &_if);
+    // Debug dump removed: it breaks userprog args-* test output expectations.
+    // hex_dump(_if.rsp, _if.rsp, USER_STACK - _if.rsp, true);
+
+    palloc_free_page(f_name); // kernel쪽의 f_name 페이지 해제
+	
+	/* 커널에서 유저 프로세스로 전환 - 컨텍스트 전환된 프로세스를 실행 시작한다
+	 * Context switching 과정의 마지막 단계, 현재 실행중인 프로세스를 다른 프로세스로 전환(switch)하고, 전환된 새로운 프로세스를 실제로 실행(start) */
 	do_iret (&_if);
 	NOT_REACHED ();
 }
 
-
-/* Waits for thread TID to die and returns its exit status.  If
- * it was terminated by the kernel (i.e. killed due to an
- * exception), returns -1.  If TID is invalid or if it was not a
- * child of the calling process, or if process_wait() has already
- * been successfully called for the given TID, returns -1
- * immediately, without waiting.
+/* 스레드 TID가 종료될 때까지 기다렸다가, 그 종료 상태(exit status)를 반환한다.  
+ * 만약 커널에 의해 종료되었을 경우(즉, 예외 때문에 강제 종료된 경우), -1을 반환한다.  
+ * TID가 유효하지 않거나, 호출한 프로세스의 자식 프로세스가 아니거나,  
+ * 주어진 TID에 대해 process_wait()이 이미 성공적으로 호출된 경우,  
+ * 기다리지 않고 즉시 -1을 반환한다.
  *
- * This function will be implemented in problem 2-2.  For now, it
- * does nothing. */
+ * 이 함수는 문제 2-2에서 구현될 예정이다. 현재는 아무 동작도 하지 않는다. */
 int
-process_wait (tid_t child_tid UNUSED) {
-	/* XXX: Hint) The pintos exit if process_wait (initd), we recommend you
-	 * XXX:       to add infinite loop here before
-	 * XXX:       implementing the process_wait. */
-	return -1;
+process_wait (tid_t child_tid) {
+    /* XXX: 힌트) Pintos는 process_wait(initd)를 실행하면 종료된다.  
+     * XXX:       process_wait를 구현하기 전에 여기에 무한 루프를 넣을 것을 권장한다. */
+    (void)child_tid;
+	// 임시 방편 sema_down()은 세마포어 값이 0이면 호출 스레드를 잠재워 CPU를 내어줌.
+	// 여기서 부모가 이걸 호출하면, 자식이 끝날 때까지 바쁜 대기 없이 잠들어 기다림.
+    // 나중에 fork() 시스템콜 구현할 때 제대로 할 예정
+	if (!thread_tests) {
+        sema_down(&initd_sema);
+        return 0;
+    }
+    return -1;
 }
 
 /* Exit the process. This function is called by thread_exit (). */
 void
 process_exit (void) {
-	struct thread *curr = thread_current ();
 	/* TODO: Your code goes here.
 	 * TODO: Implement process termination message (see
 	 * TODO: project2/process_termination.html).
 	 * TODO: We recommend you to implement process resource cleanup here. */
 
-	process_cleanup ();
+    process_cleanup ();
+
+	/* initd 완료 신호는 userprog 모드에서만 보낸다.
+	threads 테스트 모드에서는 initd_sema가 초기화되지 않는다. */
+    if (!thread_tests) {
+        sema_up(&initd_sema);
+    }
 }
 
 /* Free the current process's resources. */
@@ -316,10 +371,14 @@ static bool load_segment (struct file *file, off_t ofs, uint8_t *upage,
 		uint32_t read_bytes, uint32_t zero_bytes,
 		bool writable);
 
-/* Loads an ELF executable from FILE_NAME into the current thread.
- * Stores the executable's entry point into *RIP
- * and its initial stack pointer into *RSP.
- * Returns true if successful, false otherwise. */
+/* FILE_NAME에서 ELF 실행 파일을 현재 스레드로 로드한다.
+ * 실행 파일의 진입점(entry point)을 *RIP에 저장하고,
+ * 초기 스택 포인터를 *RSP에 저장한다.
+ * 성공하면 true를 반환하고, 실패하면 false를 반환한다.
+ * ELF 실행 파일: 리눅스/유닉스 계열에서 쓰는 실행 파일 포맷
+ * RIP (Instruction Pointer): CPU가 다음에 실행할 명령어 주소
+ * RSP (Stack Pointer): 현재 스택의 최상단을 가리키는 포인터
+ */
 static bool
 load (const char *file_name, struct intr_frame *if_) {
 	struct thread *t = thread_current ();
@@ -534,7 +593,8 @@ load_segment (struct file *file, off_t ofs, uint8_t *upage,
 	return true;
 }
 
-/* Create a minimal stack by mapping a zeroed page at the USER_STACK */
+/* USER_STACK 주소에 0으로 초기화된(page가 모두 0인) 메모리 페이지를 매핑해서 가장 기본적인 스택 공간을 마련해준다.
+   Create a minimal stack by mapping a zeroed page at the USER_STACK */
 static bool
 setup_stack (struct intr_frame *if_) {
 	uint8_t *kpage;
@@ -549,6 +609,72 @@ setup_stack (struct intr_frame *if_) {
 			palloc_free_page (kpage);
 	}
 	return success;
+}
+
+// 문자열 target을 공백(" ") 기준으로 잘라서 각 토큰(인자)을 argv 배열에 저장하고, 인자의 개수를 반환하는 함수
+// 예: target = "echo hello world" → argv = ["echo", "hello", "world", NULL]
+static int parse_args(char *target, char *argv[])
+{
+	int argc = 0; // 인자의 개수를 세기 위한 변수
+	char *token;
+	char *save_ptr; // strtok_r에서 파싱 상태를 유지하기 위한 포인터 (reentrant-safe)
+
+	// 첫 번째 토큰 추출. strtok_r는 문자열을 공백을 기준으로 분리
+	for (token = strtok_r(target, " ", &save_ptr);
+		 token != NULL;
+		 token = strtok_r(NULL, " ", &save_ptr)) // 이후 토큰부터는 첫 인자에 NULL 전달
+	{
+		argv[argc++] = token; // 잘라낸 인자를 argv 배열에 저장하고 argc 증가
+	}
+
+	// argv는 마지막에 NULL 포인터로 끝나야 exec 계열 함수에서 제대로 처리됨 (C 언어 컨벤션)
+	argv[argc] = NULL;
+
+	// 최종적으로 인자의 개수를 반환
+	return argc;
+}
+
+// 사용자 프로그램의 스택을 구성하여 인자들을 전달하는 함수
+static void argument_stack(char *argv[], int argc, struct intr_frame *_if) {
+    uint64_t rsp_arr[argc]; // 각 인자 문자열의 시작 주소를 저장할 배열
+
+    // 문자열을 스택에 역순으로 복사
+    for (int i = argc - 1; i >= 0; i--) {
+        size_t len = strlen(argv[i]) + 1;     // 문자열 길이 + 널 문자 포함
+        _if->rsp -= len;                      // 스택 아래로 공간 확보
+        rsp_arr[i] = _if->rsp;                // 해당 문자열이 위치한 주소 저장
+        memcpy((void *)_if->rsp, argv[i], len); // 스택에 문자열 복사
+    }
+
+    // 16바이트 정렬 맞추기 (rsp를 16의 배수로 내림 정렬)
+    _if->rsp = _if->rsp & ~0xF;  // 하위 4비트 0으로 마스킹 → 16의 배수
+
+    // x86-64 SysV ABI: 함수 진입 시 rsp % 16 == 8이 되도록 맞춘다.
+    // 이후에 NULL(8) + argv 포인터들(8*argc) + fake return(8)을 푸시할 예정이므로
+    // argc가 짝수일 경우 패딩 8바이트를 추가해 총 푸시 바이트가 16으로 나머지 8이 되도록 한다.
+    if ((argc % 2) == 0) {
+        _if->rsp -= 8;
+        memset((void *)_if->rsp, 0, 8);
+    }
+
+    // NULL sentinel push (argv[argc] = NULL)
+    _if->rsp -= 8;                      // 포인터 크기만큼 스택 아래로
+    memset((void *)_if->rsp, 0, sizeof(char *)); // 0으로 채움 (NULL)
+
+    // argv[i] 포인터들을 역순으로 push
+    for (int i = argc - 1; i >= 0; i--) {
+        _if->rsp -= 8;                         // 8바이트 공간 확보
+        memcpy((void *)_if->rsp, &rsp_arr[i], sizeof(char *)); // 각 문자열의 주소를 복사
+    }
+
+    // 가짜 주소 fake return address (unused, just for conventional layout)
+	// 실제로 쓰이지 않는 가짜 리턴 주소인데, 스택 프레임의 모양을 함수 호출 규약에 맞게 유지하려고 형식적으로만 넣은 값
+    _if->rsp -= 8;
+    memset((void *)_if->rsp, 0, sizeof(void *)); // 가짜 리턴 주소 = 0
+
+    // 사용자 프로그램 시작 시 인자 전달을 위한 레지스터 설정
+    _if->R.rdi = argc;             // 첫 번째 인자: argc
+    _if->R.rsi = _if->rsp + 8;     // 두 번째 인자: argv (가짜 리턴 주소 다음부터가 argv[0] 배열)
 }
 
 /* Adds a mapping from user virtual address UPAGE to kernel

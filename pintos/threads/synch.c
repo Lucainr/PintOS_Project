@@ -170,7 +170,7 @@ sema_test_helper (void *sema_) {
 		sema_up (&sema[1]);
 	}
 }
-
+
 /* Initializes LOCK.  A lock can be held by at most a single
    thread at any given time.  Our locks are not "recursive", that
    is, it is an error for the thread currently holding a lock to
@@ -305,7 +305,7 @@ lock_held_by_current_thread (const struct lock *lock) {
 
 	return lock->holder == thread_current ();
 }
-
+
 /* One semaphore in a list. */
 struct semaphore_elem {
 	struct list_elem elem;              /* List element. */
@@ -446,19 +446,19 @@ bool cmp_sema_priority(const struct list_elem *a, const struct list_elem *b, voi
  */
 void remove_with_lock(struct lock *lock, struct list *donation_list) {  
 
-    struct list_elem *cur = list_begin(donation_list);
+   struct list_elem *cur = list_begin(donation_list);
 
-    while (cur != list_end(donation_list)) {
+   while (cur != list_end(donation_list)) {
 
-        struct thread *t = list_entry(cur, struct thread, donation_elem);
-        struct list_elem *next = list_next(cur);
+      struct thread *t = list_entry(cur, struct thread, donation_elem);
+      struct list_elem *next = list_next(cur);
 
-        if (t->waiting_lock == lock) {
-            cur = list_remove(cur);  // remove한 다음 업데이트 (list_remove는 remove한 다음 요소 반환)
-		} else {
-            cur = next;
-		}
-    }
+      if (t->waiting_lock == lock) {
+         cur = list_remove(cur);  // remove한 다음 업데이트 (list_remove는 remove한 다음 요소 반환)
+      } else {
+         cur = next;
+      }
+   }
 }
 
 /*
@@ -471,11 +471,11 @@ void refresh_priority(struct thread *t) {
 	// donation_list가 비어있지 않다면
     if (!list_empty(&t->donation_list)) {
 
-        // donation_list는 각 원소가 thread.donation_elem이므로 해당 비교자를 사용한다.
-        list_sort(&t->donation_list, thread_cmp_priority_donation, NULL);
+      // donation_list는 각 원소가 thread.donation_elem이므로 해당 비교자를 사용한다.
+      list_sort(&t->donation_list, thread_cmp_priority_donation, NULL);
 
 		// donation_list의 최댓값(기부 받은 가장 높은 priority)과 비교하여 더 큰 값을 현재 priority로 반영
-        struct thread *max_t = list_entry(list_front(&t->donation_list), struct thread, donation_elem);        
+      struct thread *max_t = list_entry(list_front(&t->donation_list), struct thread, donation_elem);        
         
 		if (t->priority < max_t->priority) {
             t->priority = max_t->priority;

@@ -483,6 +483,7 @@ thread_set_priority (int new_priority) {
     enum intr_level old_level = intr_disable(); // Interrupt OFF
 
 	if (thread_mlfqs) {
+		intr_set_level(old_level); // Interrupt ON
 		return;
 	}
 

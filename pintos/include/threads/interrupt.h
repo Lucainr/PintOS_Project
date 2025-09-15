@@ -34,6 +34,7 @@ struct gp_registers {
 	uint64_t rax;
 } __attribute__((packed));
 
+/* 인터럽트나 예외가 발생했을 때 CPU가 자동으로 저장하는 레지스터 값들을 담아두는 구조체 */
 struct intr_frame {
 	/* Pushed by intr_entry in intr-stubs.S.
 	   These are the interrupted task's saved registers. */

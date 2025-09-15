@@ -74,8 +74,8 @@ main (void) {
 	bss_init ();
 
 	/* Break command line into arguments and parse options. */
-	argv = read_command_line ();
-	argv = parse_options (argv);
+	argv = read_command_line ();	// command_line을 읽는다
+	argv = parse_options (argv);	// 해당 line의 option 들을 parsing하여 argv에 담는다.
 
 	/* Initialize ourselves as a thread so we can use locks,
 	   then enable console locking. */
@@ -119,7 +119,7 @@ main (void) {
 	printf ("Boot complete.\n");
 
 	/* Run actions specified on kernel command line. */
-	run_actions (argv);
+	run_actions (argv) ; // boot시 전달된 커널 커맨드라인에 적힌 "액션들"을 실제로 실행하라. argv를 여기서 실행시킴
 
 	/* Finish up. */
 	if (power_off_when_done)
@@ -234,16 +234,23 @@ parse_options (char **argv) {
 	return argv;
 }
 
-/* Runs the task specified in ARGV[1]. */
+/* ARGV[1]에 지정된 작업을 실행한다.
+   Runs the task specified in ARGV[1]. */
 static void
 run_task (char **argv) {
-	const char *task = argv[1];
+	const char *task = argv[1];	// argv[0]는 run이고 argv[1]부터 filename이 시작되는 문자열
 
 	printf ("Executing '%s':\n", task);
 #ifdef USERPROG
 	if (thread_tests){
 		run_test (task);
 	} else {
+		/*
+		 * process_create_initd(task) 라는 함수를 실행시키고, 이때 인자로 받는 task는
+		 * command line에서 run 뒤에 썼던 문자열 전체이다.
+		 * 만약 pintos --fs-disk=10 -p tests/userprog/args-single:args-single -- -q -f run 'args-single onearg' 명령어를 사용했다면,
+		 * task는 args-single onearg 가 된다.
+ 		 */
 		process_wait (process_create_initd (task));
 	}
 #else
@@ -252,7 +259,10 @@ run_task (char **argv) {
 	printf ("Execution of '%s' complete.\n", task);
 }
 
-/* Executes all of the actions specified in ARGV[]
+/* 
+   ARGV[]에 지정된 모든 동작을 null 포인터 센티널(null pointer sentinel)까지 실행한다.
+   null pointer sentinal -> 배열의 끝을 나타내는 특별한 표시 (널 포인터)
+   Executes all of the actions specified in ARGV[]
    up to the null pointer sentinel. */
 static void
 run_actions (char **argv) {
