@@ -66,6 +66,11 @@ tid_t process_create_initd(const char *file_name)
     tid = thread_create(file_name, PRI_DEFAULT, initd, fn_copy);
     if (tid == TID_ERROR)
         palloc_free_page(fn_copy);
+    else
+    {
+        struct thread *child = find_child(&thread_current()->child_list, tid);
+        sema_down(&child->load_sema); // ⬅️ 자식의 load 결과 대기
+    }
     return tid;
 }
 
@@ -192,6 +197,8 @@ int process_exec(void *f_name)
 
     /* And then load the binary */
     success = load(file_name, &_if);
+    struct thread *cur = thread_current();
+    sema_up(&cur->load_sema);
 
     /* If load failed, quit. */
     palloc_free_page(file_name);
@@ -251,13 +258,9 @@ struct thread *find_child(struct list *list, tid_t tid)
 void process_exit(void)
 {
     struct thread *curr = thread_current();
-    /* TODO: Your code goes here.
-     * TODO: Implement process termination message (see
-     * TODO: project2/process_termination.html).
-     * TODO: We recommend you to implement process resource cleanup here. */
     if (!thread_tests) // 스레드테스트가 아니라면
     {
-        sema_up(&test_sema);
+        sema_up(&curr->wait_sema);
     }
 
     process_cleanup();
