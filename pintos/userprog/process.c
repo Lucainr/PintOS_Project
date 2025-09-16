@@ -69,6 +69,8 @@ tid_t process_create_initd(const char *file_name)
     else
     {
         struct thread *child = find_child(&thread_current()->child_list, tid);
+        if (!child)
+            return tid;
         sema_down(&child->load_sema); // ⬅️ 자식의 load 결과 대기
     }
     return tid;
@@ -479,7 +481,7 @@ static bool load(const char *file_name, struct intr_frame *if_) // echo 1 2
     setup_stack_args(if_, addr, argc);
 
     success = true;
-    // print_dump(if_, 128);
+    print_dump(if_, 128);
 done:
     /* We arrive here whether the load is successful or not. */
     file_close(file);

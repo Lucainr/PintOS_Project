@@ -45,25 +45,37 @@ void syscall_handler(struct intr_frame *f UNUSED)
     // TODO: Your implementation goes here.
     // SYS_WRIT
     // printf("system call!: %lld\n", f->R.rax);
-    if (f->R.rax == SYS_WRITE)
-    { // fd, buffer, size
+
+    switch (f->R.rax)
+    {
+    case SYS_WRITE:
+    {
         if (f->R.rdi == 1)
         {
             putbuf(f->R.rsi, f->R.rdx);
         }
-    } // 사용자 프로세스가 printf를 쓸 수 있다.
-
-    if (f->R.rax == SYS_EXIT)
+        break;
+    }
+    case SYS_EXIT:
     {
         int status = (int)f->R.rdi;
         exit(status);
+        break;
+    }
+
+    default:
+        return -1;
     }
 }
 
 void exit(int status)
 {
+    struct thread *cur = thread_current();
+    cur->exit_status = status;
     // 종료 메시지 출력: "<프로세스이름>: exit(<상태코드>)"
     printf("%s: exit(%d)\n", thread_current()->name, status);
+    // 부모에게 알려주기
+    sema_up(&cur->wait_sema);
     // 현재 스레드 종료
     thread_exit();
 }
