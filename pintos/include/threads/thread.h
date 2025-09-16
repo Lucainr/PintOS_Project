@@ -112,7 +112,16 @@ struct thread
     int niceness;
     int recent_cpu;
     struct list_elem all_elem;
-    // uint64_t *pml4;
+
+    /* 부모자식 관련 멤버 */
+    struct semaphore *wait_sema;
+    struct semaphore *exit_sema;
+
+    tid_t parent_tid;
+    int exit_status;
+
+    struct list child_list;
+    struct list_elem family_elem;
 
 #ifdef USERPROG
     /* Owned by userprog/process.c. */

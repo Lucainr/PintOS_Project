@@ -211,18 +211,12 @@ int process_exec(void *f_name)
  *
  * This function will be implemented in problem 2-2.  For now, it
  * does nothing. */
-int process_wait(tid_t child_tid UNUSED)
+int process_wait(tid_t child_tid)
 {
-    /* XXX: Hint) The pintos exit if process_wait (initd), we recommend you
-     * XXX:       to add infinite loop here before
-     * XXX:       implementing the process_wait. */
-    if (!thread_tests) // 스레드테스트가 아니라면
-    {
-        sema_down(&test_sema);
-    }
-    for (int j = 0; j < 1000; j++)
-    {
-    }
+    if (thread_tests)
+        return -1;
+
+    sema_down(&test_sema);
 
     return -1;
 }
@@ -231,10 +225,7 @@ int process_wait(tid_t child_tid UNUSED)
 void process_exit(void)
 {
     struct thread *curr = thread_current();
-    /* TODO: Your code goes here.
-     * TODO: Implement process termination message (see
-     * TODO: project2/process_termination.html).
-     * TODO: We recommend you to implement process resource cleanup here. */
+
     if (!thread_tests) // 스레드테스트가 아니라면
     {
         sema_up(&test_sema);
