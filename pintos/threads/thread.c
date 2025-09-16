@@ -371,6 +371,12 @@ tid_t thread_create(const char *name, int priority, thread_func *function,
     t->tf.cs = SEL_KCSEG;
     t->tf.eflags = FLAG_IF;
 
+    struct thread *cur = thread_current();
+    // 자식 스레드의 부모를 cur로 설정
+    t->p_tid = cur->tid;
+    // 부모 스레드의 자식 리스트에 자식 스레드 추가
+    list_push_back(&cur->child_list, &t->family_elem);
+
     /* Add to run queue. */
     thread_unblock(t);
 
@@ -668,17 +674,9 @@ static void init_thread(struct thread *t, const char *name, int priority)
     list_init(&t->donation_list);
 
     /* 부모자식 관계 설정 */
+    sema_init(&t->exit_sema, 0);
     sema_init(&t->wait_sema, 0);
-    sema_init(&t->load_sema, 0);
     list_init(&t->child_list);
-    if (t == initial_thread) // 커널스레드라면
-    {
-        t->p_tid = TID_ERROR; // 부모 없음 표시 (-1 같은 값)
-    }
-    else
-    {
-        t->p_tid = thread_current()->tid;
-    }
 
     t->waiting_lock = NULL; // 현재 대기중인 lock이 없음
 

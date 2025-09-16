@@ -66,13 +66,6 @@ tid_t process_create_initd(const char *file_name)
     tid = thread_create(file_name, PRI_DEFAULT, initd, fn_copy);
     if (tid == TID_ERROR)
         palloc_free_page(fn_copy);
-    else
-    {
-        struct thread *child = find_child(&thread_current()->child_list, tid);
-        if (!child)
-            return tid;
-        sema_down(&child->load_sema); // ⬅️ 자식의 load 결과 대기
-    }
     return tid;
 }
 
@@ -199,8 +192,6 @@ int process_exec(void *f_name)
 
     /* And then load the binary */
     success = load(file_name, &_if);
-    struct thread *cur = thread_current();
-    sema_up(&cur->load_sema);
 
     /* If load failed, quit. */
     palloc_free_page(file_name);
@@ -227,19 +218,23 @@ int process_wait(tid_t child_tid)
         return -1;
     struct thread *cur = thread_current();
 
+    enum intr_level old_leve = intr_disable();
     // 부모의 child_list에서 해당 자식 찾기
     struct thread *child = find_child(&cur->child_list, child_tid);
+    intr_set_level(old_leve);
+
     if (!child)
         return -1; // 내 자식이 아님
 
     // 자식 종료까지 대기
     sema_down(&child->wait_sema);
 
-    // 자식의 종료 코드 가져오기
     int status = child->exit_status;
+    list_remove(&child->family_elem);
+
+    sema_up(&child->exit_sema);
 
     // child_list에서 제거해서 다시 못 wait하게 함
-    list_remove(&child->family_elem);
 
     return status;
 }
@@ -260,11 +255,11 @@ struct thread *find_child(struct list *list, tid_t tid)
 void process_exit(void)
 {
     struct thread *curr = thread_current();
-    if (!thread_tests) // 스레드테스트가 아니라면
+    if (curr->p_tid != NULL)
     {
         sema_up(&curr->wait_sema);
+        sema_down(&curr->exit_sema);
     }
-
     process_cleanup();
 }
 
@@ -481,7 +476,7 @@ static bool load(const char *file_name, struct intr_frame *if_) // echo 1 2
     setup_stack_args(if_, addr, argc);
 
     success = true;
-    print_dump(if_, 128);
+    // print_dump(if_, 128);
 done:
     /* We arrive here whether the load is successful or not. */
     file_close(file);
