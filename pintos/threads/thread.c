@@ -666,6 +666,20 @@ static void init_thread(struct thread *t, const char *name, int priority)
 
     /* donation 상태 초기화 */
     list_init(&t->donation_list);
+
+    /* 부모자식 관계 설정 */
+    sema_init(&t->wait_sema, 0);
+    sema_init(&t->load_sema, 0);
+    list_init(&t->child_list);
+    if (t == initial_thread) // 커널스레드라면
+    {
+        t->p_tid = TID_ERROR; // 부모 없음 표시 (-1 같은 값)
+    }
+    else
+    {
+        t->p_tid = thread_current()->tid;
+    }
+
     t->waiting_lock = NULL; // 현재 대기중인 lock이 없음
 
     t->magic = THREAD_MAGIC;

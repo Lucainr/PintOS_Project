@@ -30,7 +30,7 @@ static void __do_fork(void *);
 static int parse_args(char *cmdline, char **argv);
 static void setup_stack_args(struct intr_frame *if_, char **argv, int argc);
 static void print_dump(struct intr_frame *if_, size_t view_byte);
-static struct semaphore test_sema;
+static struct semaphore test_sema; //
 static int exit_status = -1;
 extern bool thread_tests;
 
@@ -50,10 +50,11 @@ tid_t process_create_initd(const char *file_name)
     char *fn_copy;
     tid_t tid;
 
-    if (!thread_tests) // 스레드테스트가 아니라면
-    {
-        sema_init(&test_sema, 0);
-    }
+    // if (!thread_tests) // 스레드테스트가 아니라면
+    // {
+    //     sema_init(&test_sema, 0);
+    // }
+
     /* Make a copy of FILE_NAME.
      * Otherwise there's a race between the caller and load(). */
     fn_copy = palloc_get_page(0);
@@ -211,20 +212,39 @@ int process_exec(void *f_name)
  *
  * This function will be implemented in problem 2-2.  For now, it
  * does nothing. */
-int process_wait(tid_t child_tid UNUSED)
+int process_wait(tid_t child_tid)
 {
-    /* XXX: Hint) The pintos exit if process_wait (initd), we recommend you
-     * XXX:       to add infinite loop here before
-     * XXX:       implementing the process_wait. */
-    if (!thread_tests) // 스레드테스트가 아니라면
-    {
-        sema_down(&test_sema);
-    }
-    for (int j = 0; j < 1000; j++)
-    {
-    }
+    if (thread_tests)
+        return -1;
+    struct thread *cur = thread_current();
 
-    return -1;
+    // 부모의 child_list에서 해당 자식 찾기
+    struct thread *child = find_child(&cur->child_list, child_tid);
+    if (!child)
+        return -1; // 내 자식이 아님
+
+    // 자식 종료까지 대기
+    sema_down(&child->wait_sema);
+
+    // 자식의 종료 코드 가져오기
+    int status = child->exit_status;
+
+    // child_list에서 제거해서 다시 못 wait하게 함
+    list_remove(&child->family_elem);
+
+    return status;
+}
+
+struct thread *find_child(struct list *list, tid_t tid)
+{
+    struct list_elem *e;
+    for (e = list_begin(list); e != list_end(list); e = list_next(e))
+    {
+        struct thread *t = list_entry(e, struct thread, family_elem);
+        if (t->tid == tid)
+            return t;
+    }
+    return NULL;
 }
 
 /* Exit the process. This function is called by thread_exit (). */

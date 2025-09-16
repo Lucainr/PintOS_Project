@@ -116,8 +116,8 @@ struct thread
 
     /* 부모자식 관련멤버 */
     int exit_status;              // 종료된 상태
-    struct semaphore load_sema;   // load를 제어하는 세마포어
-    struct semaphore wait_sema;   // wait를 제어하는 세마포어
+    struct semaphore *load_sema;  // load를 제어하는 세마포어
+    struct semaphore *wait_sema;  // wait를 제어하는 세마포어
     struct list child_list;       // 자식들을 관리하는 리스트
     struct list_elem family_elem; // 자신의형제순회 + 소속
     tid_t p_tid;                  // 부모의 tid

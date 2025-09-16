@@ -82,7 +82,7 @@
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
-
+typedef int tid_t;
 /* List element. */
 struct list_elem
 {
