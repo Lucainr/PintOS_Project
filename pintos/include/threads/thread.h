@@ -114,6 +114,14 @@ struct thread
     struct list_elem all_elem;
     // uint64_t *pml4;
 
+    /* 부모자식 관련멤버 */
+    int exit_status;              // 종료된 상태
+    struct semaphore load_sema;   // load를 제어하는 세마포어
+    struct semaphore wait_sema;   // wait를 제어하는 세마포어
+    struct list child_list;       // 자식들을 관리하는 리스트
+    struct list_elem family_elem; // 자신의형제순회 + 소속
+    tid_t p_tid;                  // 부모의 tid
+
 #ifdef USERPROG
     /* Owned by userprog/process.c. */
     uint64_t *pml4; /* Page map level 4 */
