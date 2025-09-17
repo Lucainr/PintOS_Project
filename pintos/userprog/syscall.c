@@ -28,6 +28,7 @@ void syscall_handler(struct intr_frame *);
 bool create(const char *name, off_t initial_size);
 static int open(const char *name);
 static void close(int fd);
+static off_t read(int fd, void *buffer, off_t size);
 
 /* System call.
  *
@@ -45,6 +46,7 @@ static void close(int fd);
 static struct lock filesyslock;
 static void check_address(const void *addr);
 static struct file_descriptor *find_fd_s(struct list *list, int fd);
+static void copy_in(void *dst, const void *uaddr, size_t size);
 
 void syscall_init(void)
 {
@@ -91,6 +93,26 @@ void syscall_handler(struct intr_frame *f UNUSED)
     case SYS_CLOSE:
     { // input fd, void
         close(f->R.rdi);
+        break;
+    }
+
+    case SYS_READ:
+    {
+        if (f->R.rdi > 1)
+        {
+
+            read(f->R.rdi, f->R.rsi, f->R.rdx);
+        }
+        // file_read();
+        // 더이상 읽을 데이터가없다 == EOF
+        // 읽을것이 있지만 끝이다 == 읽은만큼의 데이터
+        // int read(int fd, void *buffer, unsigned size)
+
+        // off_t file_read(struct file *file, void *buffer, off_t size)
+        // {
+        //     off_t bytes_read = inode_read_at(file->inode, buffer, size,
+        //     file->pos); file->pos += bytes_read; return bytes_read;
+        // }
         break;
     }
 
@@ -150,12 +172,11 @@ static int open(const char *name)
 
     lock_acquire(&filesyslock);
     struct file *file = filesys_open(name);
-    struct file_descriptor *fd_s = malloc(sizeof(struct file_descriptor));
-    // malloc도 따로 lock을 구현해줘야한다.
     lock_release(&filesyslock);
     if (!file)
         return -1; // 파일못찾으면
 
+    struct file_descriptor *fd_s = malloc(sizeof(struct file_descriptor));
     struct thread *cur_th = thread_current();
     if (!fd_s)
         return -1; // 할당안되면
@@ -191,6 +212,35 @@ static void close(int fd)
     free(fd_s); // 파일디스크립터 객체 삭제
 }
 
+static off_t read(int fd, void *buffer, off_t size)
+{
+    if (size == 0)
+        return 0;
+    void *temp_buffer = malloc(sizeof(size));
+
+    copy_in(temp_buffer, buffer, size);
+
+    // check_address(buffer);
+    // check_address(buffer + size - 1);
+
+    struct thread *cur_th = thread_current();
+    if (cur_th->next_fd < fd)
+    {
+        exit(-1);
+    }
+    struct file_descriptor *fd_s = find_fd_s(&cur_th->fd_list, fd);
+    if (fd_s == NULL)
+    {
+        exit(-1);
+    }
+
+    lock_acquire(&filesyslock);
+    off_t result = file_read(fd_s->file, temp_buffer, size);
+    lock_release(&filesyslock);
+    free(temp_buffer);
+    return result;
+}
+
 static struct file_descriptor *find_fd_s(struct list *list, int fd)
 {
     struct list_elem *e;
@@ -207,10 +257,35 @@ static struct file_descriptor *find_fd_s(struct list *list, int fd)
 static void check_address(const void *addr)
 {
     // 포인터가 아예들어오지 않았던가 커널영역으로 주소를 보냈을때 강제종료
-    if (addr == NULL || !is_user_vaddr(addr) ||
+    // 페이지단위, 블록단위 ?? 그것도 검증
+    if (addr == NULL || !is_user_vaddr(addr) || // 커널주소라면 빠꾸!
         pml4_get_page(thread_current()->pml4, addr) == NULL)
     {
         exit(-1); // 프로세스 강제 종료
-        // 이거 공부
+    }
+}
+
+static void copy_in(void *dst, const void *uaddr, size_t size)
+{
+    uint8_t *kd = dst;
+    const uint8_t *us = uaddr;
+
+    while (size > 0)
+    {
+        if (us == NULL || !is_user_vaddr(us))
+            exit(-1);
+
+        void *kpage = pml4_get_page(thread_current()->pml4, pg_round_down(us));
+        if (kpage == NULL)
+            exit(-1);
+
+        size_t page_left = PGSIZE - pg_ofs(us);
+        size_t n = size < page_left ? size : page_left;
+
+        memcpy(kd, (uint8_t *)kpage + pg_ofs(us), n);
+
+        kd += n;
+        us += n;
+        size -= n;
     }
 }

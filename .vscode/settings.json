@@ -18,7 +18,13 @@
         "chrono": "c",
         "string_view": "c",
         "*.inc": "c",
-        "system_error": "c"
+        "system_error": "c",
+        "iosfwd": "c",
+        "limits": "c",
+        "stop_token": "c",
+        "streambuf": "c",
+        "interrupt.h": "c",
+        "file.h": "c"
     },
 
     "C_Cpp.clang_format_style": "file",
