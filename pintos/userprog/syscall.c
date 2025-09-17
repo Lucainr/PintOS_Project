@@ -9,7 +9,8 @@
 #include "threads/synch.h" // lock
 #include "threads/thread.h"
 #include "userprog/gdt.h"
-#include <filesys/file.h> // file_close()
+#include <devices/input.h> // input_getc
+#include <filesys/file.h>  // file_close()
 #include <lib/kernel/stdio.h>
 #include <stdio.h>
 #include <string.h>
@@ -99,21 +100,24 @@ void syscall_handler(struct intr_frame *f UNUSED)
 
     case SYS_READ:
     {
-        if (f->R.rdi > 1)
+        if (f->R.rdi == 0) // 입력fd 처리
         {
-
-            read(f->R.rdi, f->R.rsi, f->R.rdx);
+            uint8_t *buffer = f->R.rsi;
+            for (off_t i = 0; i < f->R.rdx; i++)
+            {
+                buffer[i] = input_getc();
+            }
+            f->R.rax = f->R.rdx;
         }
-        // file_read();
-        // 더이상 읽을 데이터가없다 == EOF
-        // 읽을것이 있지만 끝이다 == 읽은만큼의 데이터
-        // int read(int fd, void *buffer, unsigned size)
+        if (f->R.rdi > 1) // 일반fd 처리
+        {
+            f->R.rax = read(f->R.rdi, f->R.rsi, f->R.rdx);
+        }
+        else // 출력 fd처리
+        {
+            f->R.rax = -1;
+        }
 
-        // off_t file_read(struct file *file, void *buffer, off_t size)
-        // {
-        //     off_t bytes_read = inode_read_at(file->inode, buffer, size,
-        //     file->pos); file->pos += bytes_read; return bytes_read;
-        // }
         break;
     }
 

@@ -15,8 +15,8 @@ create-normal PASS
 priority-donate-lower PASS
 bad-write FAIL
 open-twice PASS
-exec-missing FAIL
 exec-arg FAIL
+exec-missing FAIL
 read-bad-ptr PASS
 dup2-complex FAIL
 create-long PASS
@@ -25,14 +25,14 @@ fork-close FAIL
 alarm-simultaneous PASS
 fork-boundary FAIL
 priority-donate-chain PASS
-rox-multichild FAIL
 create-bound PASS
+rox-multichild FAIL
 lg-random FAIL
 priority-condvar PASS
 priority-donate-nest PASS
 rox-child FAIL
 alarm-single PASS
-read-normal FAIL
+read-normal PASS
 priority-donate-multiple2 PASS
 open-empty PASS
 open-null PASS
@@ -49,8 +49,8 @@ priority-fifo PASS
 wait-bad-pid PASS
 lg-create FAIL
 exec-read FAIL
-read-boundary FAIL
 priority-sema PASS
+read-boundary PASS
 wait-twice FAIL
 exec-boundary FAIL
 close-normal PASS
@@ -92,6 +92,6 @@ open-missing PASS
 create-empty PASS
 args-single PASS
 write-stdin PASS
-read-zero FAIL
+read-zero PASS
 bad-read2 FAIL
 syn-read FAIL
