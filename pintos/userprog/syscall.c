@@ -31,6 +31,7 @@ static int open(const char *name);
 static void close(int fd);
 static off_t read(int fd, void *buffer, off_t size);
 static int filesize(int fd);
+static off_t write(int fd, const void *buffer, off_t size);
 
 /* System call.
  *
@@ -105,7 +106,7 @@ void syscall_handler(struct intr_frame *f UNUSED)
             uint8_t *buffer = f->R.rsi;
             for (off_t i = 0; i < f->R.rdx; i++)
             {
-                buffer[i] = input_getc();
+                buffer[i] = input_getc(); // 내부에서 락 처리
             }
             f->R.rax = f->R.rdx;
         }
@@ -132,7 +133,17 @@ void syscall_handler(struct intr_frame *f UNUSED)
         if (f->R.rdi == 1)
         {
             putbuf(f->R.rsi, f->R.rdx);
+            f->R.rax = f->R.rdx;
         }
+        else if (f->R.rdi > 1)
+        {
+            f->R.rax = write(f->R.rdi, f->R.rsi, f->R.rdx);
+        }
+        else
+        {
+            f->R.rax = -1;
+        }
+
         break;
     }
     case SYS_EXIT:
@@ -243,6 +254,31 @@ static off_t read(int fd, void *buffer, off_t size)
 
     lock_acquire(&filesyslock);
     off_t result = file_read(fd_s->file, buffer, size);
+    lock_release(&filesyslock);
+    return result;
+}
+
+static off_t write(int fd, const void *buffer, off_t size)
+{ // buffer에 있는것을 fd에 쓴다.
+    if (size == 0)
+        return 0;
+
+    check_address(buffer);
+    check_address(buffer + size - 1);
+
+    struct thread *cur_th = thread_current();
+    if (cur_th->next_fd < fd)
+    {
+        exit(-1);
+    }
+    struct file_descriptor *fd_s = find_fd_s(&cur_th->fd_list, fd);
+    if (fd_s == NULL)
+    {
+        exit(-1);
+    }
+
+    lock_acquire(&filesyslock);
+    off_t result = file_write(fd_s->file, buffer, size);
     lock_release(&filesyslock);
     return result;
 }
