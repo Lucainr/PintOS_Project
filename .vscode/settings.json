@@ -13,7 +13,11 @@
         "cstdlib": "c",
         "process.h": "c",
         "list.h": "c",
-        "stdint.h": "c"
+        "stdint.h": "c",
+        "filesys.h": "c",
+        "chrono": "c",
+        "string_view": "c",
+        "*.inc": "c"
     },
 
     "C_Cpp.clang_format_style": "file",
