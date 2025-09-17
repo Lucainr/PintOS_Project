@@ -1,6 +1,7 @@
 #include "userprog/syscall.h"
 #include "intrinsic.h"
 #include "threads/flags.h"
+#include "threads/init.h" // power_off
 #include "threads/interrupt.h"
 #include "threads/loader.h"
 #include "threads/thread.h"
@@ -48,6 +49,11 @@ void syscall_handler(struct intr_frame *f UNUSED)
 
     switch (f->R.rax)
     {
+    case SYS_HALT:
+    {
+        power_off();
+        break;
+    }
     case SYS_WRITE:
     {
         if (f->R.rdi == 1)
