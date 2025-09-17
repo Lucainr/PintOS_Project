@@ -678,6 +678,10 @@ static void init_thread(struct thread *t, const char *name, int priority)
     sema_init(&t->wait_sema, 0);
     list_init(&t->child_list);
 
+    /* 파일 디스크립터 멤버설정 */
+    list_init(&t->fd_list);
+    t->next_fd = 2;
+
     t->waiting_lock = NULL; // 현재 대기중인 lock이 없음
 
     t->magic = THREAD_MAGIC;

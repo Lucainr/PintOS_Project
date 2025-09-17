@@ -5,6 +5,7 @@
 #include "threads/init.h" // power_off
 #include "threads/interrupt.h"
 #include "threads/loader.h"
+#include "threads/malloc.h"
 #include "threads/synch.h" // lock
 #include "threads/thread.h"
 #include "userprog/gdt.h"
@@ -15,9 +16,17 @@
 #include <syscall-nr.h>
 #include <userprog/process.h>
 
+struct file_descriptor
+{
+    int fd;
+    struct file *file;
+    struct list_elem elem;
+};
+
 void syscall_entry(void);
 void syscall_handler(struct intr_frame *);
 bool create(const char *name, off_t initial_size);
+static int open(const char *name);
 
 /* System call.
  *
@@ -71,11 +80,12 @@ void syscall_handler(struct intr_frame *f UNUSED)
         // 모든 반환형이 있는 시스템콜은 rax에 채워줘야한다.
         break;
     }
+    case SYS_OPEN:
+    {
+        f->R.rax = open(f->R.rdi);
+        break;
+    }
 
-        // bool create(const char *file, unsigned initial_size)
-        // {
-        //     return syscall2(SYS_CREATE, file, initial_size);
-        // }
     case SYS_WRITE:
     {
         if (f->R.rdi == 1)
@@ -120,6 +130,32 @@ bool create(const char *name, off_t initial_size)
     lock_acquire(&filesyslock);
     result = filesys_create(name, initial_size);
     lock_release(&filesyslock);
+
+    return result;
+}
+
+static int open(const char *name)
+{
+    check_address(name);
+    if (strlen(name) < 1 || strlen(name) > FILE_NAME_MAX)
+        return -1; // 최소 최대 길이
+
+    lock_acquire(&filesyslock);
+    struct file *file = filesys_open(name);
+    lock_release(&filesyslock);
+    if (!file)
+        return -1; // 파일못찾으면
+
+    struct thread *cur_th = thread_current();
+    struct file_descriptor *fd_s = malloc(sizeof(struct file_descriptor));
+    if (!fd_s)
+        return -1; // 할당안되면
+    int result = cur_th->next_fd++;
+
+    fd_s->fd = result;
+    fd_s->file = file;
+
+    list_push_back(&cur_th->fd_list, &fd_s->elem);
 
     return result;
 }

@@ -123,6 +123,10 @@ struct thread
     struct list_elem family_elem; // 자신의형제순회 + 소속
     tid_t p_tid;                  // 부모의 tid
 
+    /* 파일디스크립터 멤버 */
+    struct list fd_list; // 리스트형 fd구조체
+    int next_fd;         // 다음할당fd(속도최적화)
+
 #ifdef USERPROG
     /* Owned by userprog/process.c. */
     uint64_t *pml4; /* Page map level 4 */
