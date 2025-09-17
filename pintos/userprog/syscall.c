@@ -29,6 +29,7 @@ bool create(const char *name, off_t initial_size);
 static int open(const char *name);
 static void close(int fd);
 static off_t read(int fd, void *buffer, off_t size);
+static int filesize(int fd);
 
 /* System call.
  *
@@ -113,6 +114,12 @@ void syscall_handler(struct intr_frame *f UNUSED)
         //     off_t bytes_read = inode_read_at(file->inode, buffer, size,
         //     file->pos); file->pos += bytes_read; return bytes_read;
         // }
+        break;
+    }
+
+    case SYS_FILESIZE:
+    {
+        f->R.rax = filesize(f->R.rdi);
         break;
     }
 
@@ -216,12 +223,8 @@ static off_t read(int fd, void *buffer, off_t size)
 {
     if (size == 0)
         return 0;
-    void *temp_buffer = malloc(sizeof(size));
-
-    copy_in(temp_buffer, buffer, size);
-
-    // check_address(buffer);
-    // check_address(buffer + size - 1);
+    check_address(buffer);
+    check_address(buffer + size - 1);
 
     struct thread *cur_th = thread_current();
     if (cur_th->next_fd < fd)
@@ -235,10 +238,22 @@ static off_t read(int fd, void *buffer, off_t size)
     }
 
     lock_acquire(&filesyslock);
-    off_t result = file_read(fd_s->file, temp_buffer, size);
+    off_t result = file_read(fd_s->file, buffer, size);
     lock_release(&filesyslock);
-    free(temp_buffer);
     return result;
+}
+
+static int filesize(int fd)
+{
+    struct file_descriptor *fd_s = find_fd_s(&thread_current()->fd_list, fd);
+    if (fd_s == NULL)
+        return -1;
+
+    lock_acquire(&filesyslock);
+    int size = file_length(fd_s->file);
+    lock_release(&filesyslock);
+
+    return size;
 }
 
 static struct file_descriptor *find_fd_s(struct list *list, int fd)
@@ -265,27 +280,27 @@ static void check_address(const void *addr)
     }
 }
 
-static void copy_in(void *dst, const void *uaddr, size_t size)
-{
-    uint8_t *kd = dst;
-    const uint8_t *us = uaddr;
+// static void copy_in(void *dst, const void *uaddr, size_t size)
+// {
+//     uint8_t *kd = dst;
+//     const uint8_t *us = uaddr;
 
-    while (size > 0)
-    {
-        if (us == NULL || !is_user_vaddr(us))
-            exit(-1);
+//     while (size > 0)
+//     {
+//         if (us == NULL || !is_user_vaddr(us))
+//             exit(-1);
 
-        void *kpage = pml4_get_page(thread_current()->pml4, pg_round_down(us));
-        if (kpage == NULL)
-            exit(-1);
+//         void *kpage = pml4_get_page(thread_current()->pml4,
+//         pg_round_down(us)); if (kpage == NULL)
+//             exit(-1);
 
-        size_t page_left = PGSIZE - pg_ofs(us);
-        size_t n = size < page_left ? size : page_left;
+//         size_t page_left = PGSIZE - pg_ofs(us);
+//         size_t n = size < page_left ? size : page_left;
 
-        memcpy(kd, (uint8_t *)kpage + pg_ofs(us), n);
+//         memcpy(kd, (uint8_t *)kpage + pg_ofs(us), n);
 
-        kd += n;
-        us += n;
-        size -= n;
-    }
-}
+//         kd += n;
+//         us += n;
+//         size -= n;
+//     }
+// }
