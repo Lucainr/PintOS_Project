@@ -17,7 +17,8 @@
         "filesys.h": "c",
         "chrono": "c",
         "string_view": "c",
-        "*.inc": "c"
+        "*.inc": "c",
+        "system_error": "c"
     },
 
     "C_Cpp.clang_format_style": "file",

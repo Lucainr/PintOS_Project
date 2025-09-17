@@ -9,10 +9,10 @@
 #include "threads/synch.h" // lock
 #include "threads/thread.h"
 #include "userprog/gdt.h"
+#include <filesys/file.h> // file_close()
 #include <lib/kernel/stdio.h>
 #include <stdio.h>
 #include <string.h>
-
 #include <syscall-nr.h>
 #include <userprog/process.h>
 
@@ -27,6 +27,7 @@ void syscall_entry(void);
 void syscall_handler(struct intr_frame *);
 bool create(const char *name, off_t initial_size);
 static int open(const char *name);
+static void close(int fd);
 
 /* System call.
  *
@@ -43,6 +44,7 @@ static int open(const char *name);
 #define MSR_SYSCALL_MASK 0xc0000084 /* Mask for the eflags */
 static struct lock filesyslock;
 static void check_address(const void *addr);
+static struct file_descriptor *find_fd_s(struct list *list, int fd);
 
 void syscall_init(void)
 {
@@ -83,6 +85,12 @@ void syscall_handler(struct intr_frame *f UNUSED)
     case SYS_OPEN:
     {
         f->R.rax = open(f->R.rdi);
+        // exit, close 등에서 fd구조체 삭제해야함(미완성)
+        break;
+    }
+    case SYS_CLOSE:
+    { // input fd, void
+        close(f->R.rdi);
         break;
     }
 
@@ -142,12 +150,13 @@ static int open(const char *name)
 
     lock_acquire(&filesyslock);
     struct file *file = filesys_open(name);
+    struct file_descriptor *fd_s = malloc(sizeof(struct file_descriptor));
+    // malloc도 따로 lock을 구현해줘야한다.
     lock_release(&filesyslock);
     if (!file)
         return -1; // 파일못찾으면
 
     struct thread *cur_th = thread_current();
-    struct file_descriptor *fd_s = malloc(sizeof(struct file_descriptor));
     if (!fd_s)
         return -1; // 할당안되면
     int result = cur_th->next_fd++;
@@ -158,6 +167,41 @@ static int open(const char *name)
     list_push_back(&cur_th->fd_list, &fd_s->elem);
 
     return result;
+}
+
+static void close(int fd)
+{
+    if (fd < 2)
+        return;
+
+    struct thread *cur_th = thread_current();
+    if (cur_th->next_fd < fd)
+        return;
+
+    // fd 찾아서 해당 elem삭제하고 메모리해제
+    struct file_descriptor *fd_s = find_fd_s(&cur_th->fd_list, fd);
+    if (fd_s == NULL)
+        return;
+    list_remove(&fd_s->elem); // 리스트에서 해제
+
+    lock_acquire(&filesyslock);
+    file_close(fd_s->file); // file객체, inode 참조해제
+    lock_release(&filesyslock);
+
+    free(fd_s); // 파일디스크립터 객체 삭제
+}
+
+static struct file_descriptor *find_fd_s(struct list *list, int fd)
+{
+    struct list_elem *e;
+    for (e = list_begin(list); e != list_end(list); e = list_next(e))
+    {
+        struct file_descriptor *fd_s =
+            list_entry(e, struct file_descriptor, elem);
+        if (fd_s->fd == fd)
+            return fd_s;
+    }
+    return NULL;
 }
 
 static void check_address(const void *addr)
