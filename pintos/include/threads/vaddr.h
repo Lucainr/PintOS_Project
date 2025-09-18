@@ -40,7 +40,7 @@
 /* Returns true if VADDR is a user virtual address. */
 #define is_user_vaddr(vaddr) (!is_kernel_vaddr((vaddr)))
 
-/* Returns true if VADDR is a kernel virtual address. */
+/* KERN_BASE 이상이면 커널 가상주소로 간주 */
 #define is_kernel_vaddr(vaddr) ((uint64_t)(vaddr) >= KERN_BASE)
 
 // FIXME: add checking

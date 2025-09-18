@@ -356,6 +356,13 @@ thread_create (const char *name, int priority,
 
 	/* Add to run queue. */
 	thread_unblock (t);
+	
+	// Project2 - User Program
+	struct thread *current_thread = thread_current();
+	// 자식 스레드의 부모를 current_thread로 설정
+	t->parent = current_thread;
+	// 부모 스레드의 자식 리스트에 자식 스레드 추가
+	list_push_back(&current_thread->children, &t->child_elem);
 
 	// 현재 생성된 Thread보다 readylist에 있는 Thread의 우선순위(priority)가 더 높다면 양보(yield) 
 	preempt_priority();
@@ -639,6 +646,14 @@ init_thread (struct thread *t, const char *name, int priority) {
 	t->waiting_lock = NULL;				// 현재 대기중인 lock이 없음
 
 	t->magic = THREAD_MAGIC;
+
+	t->exit_status = 0;
+	// Project 2 - User Program
+	sema_init(&t->wait_sema, 0);
+	sema_init(&t->exit_sema, 0);
+	list_init(&t->children);
+	sema_init(&t->fork_sema, 0);
+	t->fork_status = -1;
 }
 
 /* Chooses and returns the next thread to be scheduled.  Should
@@ -800,8 +815,7 @@ schedule (void) {
 			list_push_back (&destruction_req, &curr->elem);
 		}
 
-		/* Before switching the thread, we first save the information
-		 * of current running. */
+		/* 스레드를 전환하기 전에, 현재 실행 중인 스레드의 정보를 먼저 저장합니다. */
 		thread_launch (next);
 	}
 }

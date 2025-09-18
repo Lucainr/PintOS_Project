@@ -5,6 +5,7 @@
 #include <list.h>
 #include <stdint.h>
 #include "threads/interrupt.h"
+#include "threads/synch.h"
 #ifdef VM
 #include "vm/vm.h"
 #endif
@@ -31,6 +32,10 @@ typedef int tid_t;
 #define NICE_DEFAULT 0
 #define RECENT_CPU_DEFAULT 0
 #define LOAD_AVG_DEFAULT 0
+
+// FDT
+#define FDT_PAGES 1						// 프로세스 FDT 초기화 시 할당할 페이지
+#define MAX_FD (FDT_PAGES * (1 << 9)) 	// 최대 FD 개수 (전체 범위 순회 시 사용)
 
 /* A kernel thread or user process.
  *
@@ -110,9 +115,25 @@ struct thread {
 	int recent_cpu;
 	struct list_elem all_elem;
 
-#ifdef USERPROG
+	#ifdef USERPROG
 	/* Owned by userprog/process.c. */
 	uint64_t *pml4;                     /* Page map level 4 */
+	// Project 2 - User Program
+	int exit_status; 				   // 종료 상태 값
+
+	struct semaphore wait_sema;		   // 부모의 자식 종료 대기용 세마포어
+	struct semaphore exit_sema;		   // 자식 종료 시 자식의 부모 wait 마무리 대기용 세마포어
+	struct semaphore fork_sema;		   // 자식 프로세스 초기화 대기용 세마포어
+	int fork_status;                   // fork 초기화 성공 여부 (0:성공, -1:실패)
+
+	struct list children;              // 자식 프로세스 리스트
+	struct list_elem child_elem;       // 부모의 children 리스트에 들어갈 element
+	struct thread *parent;             // 부모 프로세스 포인터
+	struct intr_frame intr_frame;      // 저삭 프로세스의 부모 레지스터 값 복제용 인터럽트 프레임
+
+	struct file **FDT;			// File Descriptor Table
+	int next_FD;				// 다음 사용 가능한 fd값
+	struct file *running_file;	// 현재 프로세스에서 실행 중인 파일
 #endif
 #ifdef VM
 	/* Table for whole virtual memory owned by thread. */
