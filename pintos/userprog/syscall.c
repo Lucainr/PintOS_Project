@@ -46,6 +46,7 @@ static off_t write(int fd, const void *buffer, off_t size);
 #define MSR_STAR 0xc0000081         /* Segment selector msr */
 #define MSR_LSTAR 0xc0000082        /* Long mode SYSCALL target */
 #define MSR_SYSCALL_MASK 0xc0000084 /* Mask for the eflags */
+typedef int pid_t;
 static struct lock filesyslock;
 static void check_address(const void *addr);
 static struct file_descriptor *find_fd_s(struct list *list, int fd);
@@ -101,7 +102,9 @@ void syscall_handler(struct intr_frame *f UNUSED)
 
     case SYS_READ:
     {
-        if (f->R.rdi == 0) // 입력fd 처리
+        switch (f->R.rdi)
+        {
+        case 0: // stdin
         {
             uint8_t *buffer = f->R.rsi;
             for (off_t i = 0; i < f->R.rdx; i++)
@@ -109,16 +112,17 @@ void syscall_handler(struct intr_frame *f UNUSED)
                 buffer[i] = input_getc(); // 내부에서 락 처리
             }
             f->R.rax = f->R.rdx;
+            break;
         }
-        if (f->R.rdi > 1) // 일반fd 처리
-        {
-            f->R.rax = read(f->R.rdi, f->R.rsi, f->R.rdx);
-        }
-        else // 출력 fd처리
+        case 1: // stdout
         {
             f->R.rax = -1;
+            break;
         }
-
+        default: // 일반fd
+            f->R.rax = read(f->R.rdi, f->R.rsi, f->R.rdx);
+            break;
+        }
         break;
     }
 
@@ -130,19 +134,30 @@ void syscall_handler(struct intr_frame *f UNUSED)
 
     case SYS_WRITE:
     {
-        if (f->R.rdi == 1)
+        switch (f->R.rdi)
+        {
+        case 0: // stdin
+        {
+            f->R.rax = -1;
+            break;
+        }
+        case 1: // stdout
         {
             putbuf(f->R.rsi, f->R.rdx);
             f->R.rax = f->R.rdx;
+            break;
         }
-        else if (f->R.rdi > 1)
-        {
+        default: // 일반fd
             f->R.rax = write(f->R.rdi, f->R.rsi, f->R.rdx);
+            break;
         }
-        else
-        {
-            f->R.rax = -1;
-        }
+        break;
+    }
+    // case SYS_EXEC:{
+    //     exit();
+    // }
+    case SYS_FORK:
+    {
 
         break;
     }
@@ -157,7 +172,6 @@ void syscall_handler(struct intr_frame *f UNUSED)
         return -1;
     }
 }
-
 void exit(int status)
 {
     struct thread *cur = thread_current();
@@ -184,6 +198,10 @@ bool create(const char *name, off_t initial_size)
     lock_release(&filesyslock);
 
     return result;
+}
+
+static pid_t fork(char *thread_name)
+{
 }
 
 static int open(const char *name)
@@ -263,8 +281,8 @@ static off_t write(int fd, const void *buffer, off_t size)
     if (size == 0)
         return 0;
 
-    check_address(buffer);
-    check_address(buffer + size - 1);
+    check_address(buffer);            // 버퍼의 맨앞, 여기처리 꼭해야하는지?
+    check_address(buffer + size - 1); // 버퍼의 맨뒤
 
     struct thread *cur_th = thread_current();
     if (cur_th->next_fd < fd)

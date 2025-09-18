@@ -50,11 +50,6 @@ tid_t process_create_initd(const char *file_name)
     char *fn_copy;
     tid_t tid;
 
-    // if (!thread_tests) // 스레드테스트가 아니라면
-    // {
-    //     sema_init(&test_sema, 0);
-    // }
-
     /* Make a copy of FILE_NAME.
      * Otherwise there's a race between the caller and load(). */
     fn_copy = palloc_get_page(0);
@@ -87,10 +82,26 @@ static void initd(void *f_name)
 
 /* Clones the current process as `name`. Returns the new process's thread id, or
  * TID_ERROR if the thread cannot be created. */
-tid_t process_fork(const char *name, struct intr_frame *if_ UNUSED)
+tid_t process_fork(const char *name, struct intr_frame *if_)
 {
+    struct fork_aux *aux = malloc(sizeof(struct fork_aux));
+    *aux->p_if = *if_;
+    aux->parent = thread_current();
+    sema_init(&aux->done, 0);
+    aux->success = false;
     /* Clone current thread to new thread.*/
-    return thread_create(name, PRI_DEFAULT, __do_fork, thread_current());
+    tid_t tid = thread_create(name, PRI_DEFAULT, __do_fork, aux);
+
+    if (!tid)
+    {
+        free(aux);
+        return TID_ERROR;
+    }
+
+    sema_down(&aux->done);
+    tid_t result = aux->success ? tid : TID_ERROR;
+    free(aux);
+    return result;
 }
 
 #ifndef VM
@@ -105,22 +116,33 @@ static bool duplicate_pte(uint64_t *pte, void *va, void *aux)
     bool writable;
 
     /* 1. TODO: If the parent_page is kernel page, then return immediately. */
+    if (is_kern_pte(pte))
+        return true;
 
     /* 2. Resolve VA from the parent's page map level 4. */
     parent_page = pml4_get_page(parent->pml4, va);
+    if (!parent_page)
+        return false;
 
     /* 3. TODO: Allocate new PAL_USER page for the child and set result to
      *    TODO: NEWPAGE. */
+    newpage = palloc_get_page(PAL_USER | PAL_ZERO);
+    if (!newpage)
+        return false;
+    memcpy(newpage, parent_page, PGSIZE);
 
     /* 4. TODO: Duplicate parent's page to the new page and
      *    TODO: check whether parent's page is writable or not (set WRITABLE
      *    TODO: according to the result). */
+    writable = is_writable(pte);
 
     /* 5. Add new page to child's page table at address VA with WRITABLE
      *    permission. */
     if (!pml4_set_page(current->pml4, va, newpage, writable))
     {
+        palloc_free_page(newpage);
         /* 6. TODO: if fail to insert page, do error handling. */
+        return false;
     }
     return true;
 }
@@ -132,11 +154,12 @@ static bool duplicate_pte(uint64_t *pte, void *va, void *aux)
  *       this function. */
 static void __do_fork(void *aux)
 {
+    struct fork_aux *arg = aux;
     struct intr_frame if_;
-    struct thread *parent = (struct thread *)aux;
+    struct thread *parent = arg->parent;
     struct thread *current = thread_current();
     /* TODO: somehow pass the parent_if. (i.e. process_fork()'s if_) */
-    struct intr_frame *parent_if;
+    struct intr_frame *parent_if = arg->p_if;
     bool succ = true;
 
     /* 1. Read the cpu context to local stack. */
@@ -162,7 +185,7 @@ static void __do_fork(void *aux)
      * TODO:       in include/filesys/file.h. Note that parent should not return
      * TODO:       from the fork() until this function successfully duplicates
      * TODO:       the resources of parent.*/
-
+    // 여기서 아마 세마업을 해야할거
     process_init();
 
     /* Finally, switch to the newly created process. */

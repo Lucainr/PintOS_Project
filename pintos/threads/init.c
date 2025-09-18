@@ -68,7 +68,6 @@ int main(void)
 {
     uint64_t mem_end;
     char **argv;
-    printf("안녕하세요");
     /* Clear BSS and get machine's RAM size. */
     bss_init();
 
