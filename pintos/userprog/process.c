@@ -10,8 +10,10 @@
 #include "threads/mmu.h"
 #include "threads/palloc.h"
 #include "threads/synch.h"
+#include "threads/thread.h" // lock
 #include "threads/vaddr.h"
 #include "userprog/gdt.h"
+#include "userprog/syscall.h" // 파일디스크립터 구조체
 #include "userprog/tss.h"
 #include <debug.h>
 #include <inttypes.h>
@@ -30,8 +32,10 @@ static void __do_fork(void *);
 static int parse_args(char *cmdline, char **argv);
 static void setup_stack_args(struct intr_frame *if_, char **argv, int argc);
 static void print_dump(struct intr_frame *if_, size_t view_byte);
-static struct semaphore test_sema; //
+static bool cpy_fd_table(struct thread *p_th, struct thread *c_th);
+static struct lock filesyslock;
 static int exit_status = -1;
+
 extern bool thread_tests;
 
 /* General process initializer for initd and other process. */
@@ -115,33 +119,30 @@ static bool duplicate_pte(uint64_t *pte, void *va, void *aux)
     void *newpage;
     bool writable;
 
-    /* 1. TODO: If the parent_page is kernel page, then return immediately. */
+    // 1. 커널이면 복사할 필요가 없다. (공유하기 때문에)
     if (is_kern_pte(pte))
         return true;
 
-    /* 2. Resolve VA from the parent's page map level 4. */
+    /* 2. va를 통해 물리메모리주소를 얻어오는 과정 */
     parent_page = pml4_get_page(parent->pml4, va);
     if (!parent_page)
         return false;
 
-    /* 3. TODO: Allocate new PAL_USER page for the child and set result to
-     *    TODO: NEWPAGE. */
+    /* 3. 새로운 페이지를 할당받고, 그 주소를 복사 */
     newpage = palloc_get_page(PAL_USER | PAL_ZERO);
     if (!newpage)
         return false;
     memcpy(newpage, parent_page, PGSIZE);
 
-    /* 4. TODO: Duplicate parent's page to the new page and
-     *    TODO: check whether parent's page is writable or not (set WRITABLE
-     *    TODO: according to the result). */
+    /* 4. 해당페이지의 권한 */
     writable = is_writable(pte);
 
-    /* 5. Add new page to child's page table at address VA with WRITABLE
-     *    permission. */
+    /* 5. 자식의 가상주소(upage = va) 를 새로 할당한 커널 주소
+     * (kpage = newpage) 가 가리키는 물리 프레임에 매핑해라 */
     if (!pml4_set_page(current->pml4, va, newpage, writable))
     {
-        palloc_free_page(newpage);
         /* 6. TODO: if fail to insert page, do error handling. */
+        palloc_free_page(newpage);
         return false;
     }
     return true;
@@ -168,8 +169,10 @@ static void __do_fork(void *aux)
     /* 2. Duplicate PT */
     current->pml4 = pml4_create();
     if (current->pml4 == NULL)
+    {
+        succ = false;
         goto error;
-
+    }
     process_activate(current);
 #ifdef VM
     supplemental_page_table_init(&current->spt);
@@ -177,22 +180,69 @@ static void __do_fork(void *aux)
         goto error;
 #else
     if (!pml4_for_each(parent->pml4, duplicate_pte, parent))
+    {
+        succ = false;
         goto error;
+    }
 #endif
 
     /* TODO: Your code goes here.
-     * TODO: Hint) To duplicate the file object, use `file_duplicate`
+     * TODO: Hint) To duplicate the file object, use `uplicate`
      * TODO:       in include/filesys/file.h. Note that parent should not return
      * TODO:       from the fork() until this function successfully duplicates
      * TODO:       the resources of parent.*/
-    // 여기서 아마 세마업을 해야할거
-    process_init();
 
+    lock_acquire(&filesyslock);
+    if (!cpy_fd_table(parent, current))
+    {
+        lock_release(&filesyslock);
+        succ = false;
+        goto error;
+    }
+    lock_release(&filesyslock);
+    process_init(); // 이건 왜있지?
+    if_.R.rax = 0;
+
+    /* 4) 부모에게 결과 통지 */
+    arg->success = succ;
+    sema_up(&arg->done);
     /* Finally, switch to the newly created process. */
     if (succ)
         do_iret(&if_);
 error:
+    if (!succ)
+    {
+        arg->success = succ;
+        sema_up(&arg->done);
+    }
     thread_exit();
+}
+static bool cpy_fd_table(struct thread *p_th, struct thread *c_th)
+{
+    struct list_elem *e;
+    for (e = list_begin(&p_th->fd_list); e != list_end(&p_th->fd_list);
+         e = list_next(e)) // 부모의 fd_list를 순회
+    {
+        /* 부모의 fd데이터 새로운 자식의 fd */
+        struct file_descriptor *fd_s =
+            list_entry(e, struct file_descriptor, elem);
+        struct file_descriptor *nfd_s = malloc(sizeof(struct file_descriptor));
+        if (nfd_s == NULL)
+            return false;
+
+        /* 자식 fd구조체에 할당 */
+        nfd_s->fd = fd_s->fd;
+        nfd_s->file = file_duplicate(fd_s->file);
+        if (nfd_s->file == NULL)
+        {
+            free(nfd_s);
+            return false;
+        }
+
+        list_push_back(&c_th->fd_list, &nfd_s->elem);
+    }
+    c_th->next_fd = p_th->next_fd;
+    return true;
 }
 
 /* Switch the current execution context to the f_name.

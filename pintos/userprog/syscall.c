@@ -17,12 +17,12 @@
 #include <syscall-nr.h>
 #include <userprog/process.h>
 
-struct file_descriptor
-{
-    int fd;
-    struct file *file;
-    struct list_elem elem;
-};
+// struct file_descriptor
+// {
+//     int fd;
+//     struct file *file;
+//     struct list_elem elem;
+// };
 
 void syscall_entry(void);
 void syscall_handler(struct intr_frame *);
@@ -153,12 +153,9 @@ void syscall_handler(struct intr_frame *f UNUSED)
         }
         break;
     }
-    // case SYS_EXEC:{
-    //     exit();
-    // }
     case SYS_FORK:
     {
-
+        f->R.rax = fork(f->R.rdi, f);
         break;
     }
     case SYS_EXIT:
@@ -200,8 +197,9 @@ bool create(const char *name, off_t initial_size)
     return result;
 }
 
-static pid_t fork(char *thread_name)
+static pid_t fork(char *thread_name, struct intr_frame *if_)
 {
+    return process_fork(thread_name, if_);
 }
 
 static int open(const char *name)
