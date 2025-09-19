@@ -95,7 +95,6 @@ tid_t process_fork(const char *name, struct intr_frame *if_)
     aux->success = false;
     /* Clone current thread to new thread.*/
     tid_t tid = thread_create(name, PRI_DEFAULT, __do_fork, aux);
-
     if (!tid)
     {
         free(aux);
@@ -195,7 +194,7 @@ static void __do_fork(void *aux)
     // lock_acquire(&filesyslock);
     if (!cpy_fd_table(parent, current))
     {
-        lock_release(&filesyslock);
+        // lock_release(&filesyslock);
         succ = false;
         goto error;
     }
@@ -330,8 +329,8 @@ void process_exit(void)
     struct thread *curr = thread_current();
     if (curr->p_tid != NULL)
     {
-        sema_up(&curr->wait_sema);
-        sema_down(&curr->exit_sema);
+        sema_up(&curr->wait_sema);   // 부모다시시작해라
+        sema_down(&curr->exit_sema); // 부모가 프린트찍을때까진 있어라
     }
     process_cleanup();
 }

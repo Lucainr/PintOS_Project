@@ -32,6 +32,8 @@ static void close(int fd);
 static off_t read(int fd, void *buffer, off_t size);
 static int filesize(int fd);
 static off_t write(int fd, const void *buffer, off_t size);
+static int wait(int tid);
+void exit(int status);
 
 /* System call.
  *
@@ -158,6 +160,11 @@ void syscall_handler(struct intr_frame *f UNUSED)
         f->R.rax = fork(f->R.rdi, f);
         break;
     }
+    case SYS_WAIT:
+    {
+        f->R.rax = wait(f->R.rdi);
+        break;
+    }
     case SYS_EXIT:
     {
         int status = (int)f->R.rdi;
@@ -169,6 +176,11 @@ void syscall_handler(struct intr_frame *f UNUSED)
         return -1;
     }
 }
+static int wait(int tid)
+{
+    return process_wait(tid);
+}
+
 void exit(int status)
 {
     struct thread *cur = thread_current();
@@ -176,7 +188,7 @@ void exit(int status)
     // 종료 메시지 출력: "<프로세스이름>: exit(<상태코드>)"
     printf("%s: exit(%d)\n", thread_current()->name, status);
     // 부모에게 알려주기
-    sema_up(&cur->wait_sema);
+    // sema_up(&cur->wait_sema);
     // 현재 스레드 종료
     thread_exit();
 }

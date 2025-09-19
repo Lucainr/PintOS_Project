@@ -3,6 +3,7 @@
 #include "threads/interrupt.h"
 #include "threads/thread.h"
 #include "userprog/gdt.h"
+#include "userprog/syscall.h"
 #include <inttypes.h>
 #include <stdio.h>
 
@@ -84,6 +85,7 @@ static void kill(struct intr_frame *f)
     case SEL_UCSEG:
         /* User's code segment, so it's a user exception, as we
            expected.  Kill the user process.  */
+        exit(-1);
         printf("%s: dying due to interrupt %#04llx (%s).\n", thread_name(),
                f->vec_no, intr_name(f->vec_no));
         intr_dump_frame(f);
