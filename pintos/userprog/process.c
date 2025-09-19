@@ -294,10 +294,20 @@ process_exec (void *f_name) {
 	_if.eflags = FLAG_IF | FLAG_MBS;
 
 	/* 먼저 현재 컨텍스트를 종료한다.
-	 * 열린 파일 닫기
-	 * 페이지 테이블 해제
-	 * 유저 스택 정리 등
-	 */
+	 * - 열린 파일 닫기
+	 * - 페이지 테이블 해제
+	 * - 유저 스택 정리
+	 * 기존에 exec()가 시작되기 전에 기존 running_file을 file_close()로 닫고 포인터를 NULL로 초기화 했는데,
+	 * 부모에서 물려받은 실행 파일 핸들이 그대로 남아서 inode_deny_write_cnt가 줄지 않았음
+	 * 그래서 rox-multichild 처럼 자식이 모두 끝난 뒤에도 실행 파일 쓰기가 계속 막힘
+	 * 현재는 exec()가 이전 실행 파일의 deny-write 상태를 해제하고 새 프로그램을 로드하기 때문에
+	 * 참조 카운트가 0으로 돌아가고 부모의 마지막 write()도 성공함*/
+	struct thread *current_thread = thread_current ();
+	if (current_thread->running_file != NULL) {
+		/* 이전 실행 파일의 deny-write를 해제하고 핸들을 닫는다. */
+		file_close (current_thread->running_file);
+		current_thread->running_file = NULL;
+	}
 	process_cleanup ();
 
 	// 파일 이름 Parsing 결과의 첫번째 토큰은 실제 실행할 파일 이름임
