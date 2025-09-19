@@ -21,7 +21,7 @@ read-bad-ptr PASS
 dup2-complex FAIL
 create-long PASS
 priority-preempt PASS
-fork-close FAIL
+fork-close PASS
 alarm-simultaneous PASS
 fork-boundary FAIL
 priority-donate-chain PASS
@@ -81,7 +81,7 @@ lg-seq-block FAIL
 wait-simple FAIL
 exec-once FAIL
 args-many PASS
-fork-read FAIL
+fork-read PASS
 write-zero PASS
 alarm-multiple PASS
 create-exists PASS

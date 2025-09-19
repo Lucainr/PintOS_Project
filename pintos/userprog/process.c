@@ -89,7 +89,7 @@ static void initd(void *f_name)
 tid_t process_fork(const char *name, struct intr_frame *if_)
 {
     struct fork_aux *aux = malloc(sizeof(struct fork_aux));
-    *aux->p_if = *if_;
+    aux->p_if = *if_;
     aux->parent = thread_current();
     sema_init(&aux->done, 0);
     aux->success = false;
@@ -160,11 +160,11 @@ static void __do_fork(void *aux)
     struct thread *parent = arg->parent;
     struct thread *current = thread_current();
     /* TODO: somehow pass the parent_if. (i.e. process_fork()'s if_) */
-    struct intr_frame *parent_if = arg->p_if;
+    // struct intr_frame *parent_if = arg->p_if;
     bool succ = true;
 
     /* 1. Read the cpu context to local stack. */
-    memcpy(&if_, parent_if, sizeof(struct intr_frame));
+    memcpy(&if_, &arg->p_if, sizeof(struct intr_frame));
 
     /* 2. Duplicate PT */
     current->pml4 = pml4_create();
@@ -192,15 +192,15 @@ static void __do_fork(void *aux)
      * TODO:       from the fork() until this function successfully duplicates
      * TODO:       the resources of parent.*/
 
-    lock_acquire(&filesyslock);
+    // lock_acquire(&filesyslock);
     if (!cpy_fd_table(parent, current))
     {
         lock_release(&filesyslock);
         succ = false;
         goto error;
     }
-    lock_release(&filesyslock);
-    process_init(); // 이건 왜있지?
+    // lock_release(&filesyslock);
+    // process_init(); // 이건 왜있지?
     if_.R.rax = 0;
 
     /* 4) 부모에게 결과 통지 */

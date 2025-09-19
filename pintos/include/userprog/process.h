@@ -13,7 +13,7 @@ struct thread *find_child(struct list *list, tid_t tid);
 /* fork 전용 구조체 */
 struct fork_aux
 {
-    struct intr_frame *p_if;
+    struct intr_frame p_if;
     struct thread *parent;
     struct semaphore done;
     bool success;
