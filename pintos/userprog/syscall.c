@@ -182,9 +182,45 @@ void syscall_handler(struct intr_frame *f UNUSED)
         break;
     }
 
+    case SYS_SEEK:
+    {
+        f->R.rax = syscall_seek(f->R.rdi, f->R.rsi);
+        break;
+    }
+
+    case SYS_TELL:
+    {
+        f->R.rax = syscall_tell(f->R.rdi);
+
+        break;
+    }
+
     default:
         return -1;
     }
+}
+static unsigned syscall_tell(int fd)
+{
+    struct thread *curr_th = thread_current();
+    struct file_descriptor *fd_s = find_fd_s(&curr_th->fd_list, fd);
+    if (fd_s == NULL)
+    {
+        exit(-1);
+    }
+    return file_tell(fd_s->file);
+}
+
+static bool syscall_seek(int fd, off_t pos)
+{
+    struct thread *curr_th = thread_current();
+    struct file_descriptor *fd_s = find_fd_s(&curr_th->fd_list, fd);
+    if (fd_s == NULL)
+    {
+        return false;
+    }
+    file_seek(fd_s->file, pos);
+
+    return true;
 }
 
 static int syscall_exec(char *filename)
