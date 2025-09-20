@@ -61,15 +61,22 @@ tid_t process_create_initd(const char *file_name)
         return TID_ERROR;
     strlcpy(fn_copy, file_name, PGSIZE);
 
+    char cmd_copy[64];
+    strlcpy(cmd_copy, fn_copy, sizeof cmd_copy);
+
+    char *saveptr;
+    strtok_r(cmd_copy, " ", &saveptr);
+
+    strlcpy(thread_current()->name, cmd_copy, sizeof cmd_copy);
     /* Create a new thread to execute FILE_NAME. */
-    tid = thread_create(file_name, PRI_DEFAULT, initd, fn_copy);
+    tid = thread_create(cmd_copy, PRI_DEFAULT, initd, fn_copy);
     if (tid == TID_ERROR)
         palloc_free_page(fn_copy);
     return tid;
 }
 
 /* A thread function that launches first user process. */
-static void initd(void *f_name)
+static void initd(void *cmdline)
 {
 #ifdef VM
     supplemental_page_table_init(&thread_current()->spt);
@@ -78,8 +85,7 @@ static void initd(void *f_name)
     process_init(); // 현재스레드를 프로세스로서 준비하는 함수.
     // Pintos에서는 프로세스 = 스레드 1개 + 별도의 주소 공간
     // 아직 ELF로딩 안함
-
-    if (process_exec(f_name) < 0)
+    if (process_exec(cmdline) < 0)
         PANIC("Fail to launch initd\n");
     NOT_REACHED();
 }
@@ -264,8 +270,6 @@ int process_exec(void *f_name)
 
     /* And then load the binary */
     success = load(file_name, &_if);
-
-    /* If load failed, quit. */
     palloc_free_page(file_name);
     if (!success)
         return -1;
