@@ -458,8 +458,9 @@ static bool load(const char *file_name, struct intr_frame *if_) // echo 1 2
 
     int argc = parse_args(file_name, addr);
 
-    strlcpy(thread_current()->name, addr[0],
-            sizeof thread_current()->name); /* 버퍼 오버플로우 방지용 */
+    // pintos는 실행된 스레드의 이름을 바꾸지 않음
+    // strlcpy(thread_current()->name, addr[0],
+    //         sizeof thread_current()->name);
 
     file = filesys_open(addr[0]);
     if (file == NULL)

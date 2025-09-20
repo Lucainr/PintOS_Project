@@ -6,7 +6,8 @@
 #include "threads/interrupt.h"
 #include "threads/loader.h"
 #include "threads/malloc.h"
-#include "threads/synch.h" // lock
+#include "threads/palloc.h" // palloc
+#include "threads/synch.h"  // lock
 #include "threads/thread.h"
 #include "userprog/gdt.h"
 #include <devices/input.h> // input_getc
@@ -23,7 +24,7 @@
 //     struct file *file;
 //     struct list_elem elem;
 // };
-
+bool copy_user_string(char *dst, const char *src, size_t max_len);
 void syscall_entry(void);
 void syscall_handler(struct intr_frame *);
 bool create(const char *name, off_t initial_size);
@@ -34,6 +35,7 @@ static int filesize(int fd);
 static off_t write(int fd, const void *buffer, off_t size);
 static int wait(int tid);
 void exit(int status);
+static int syscall_exec(char *filename);
 
 /* System call.
  *
@@ -172,10 +174,37 @@ void syscall_handler(struct intr_frame *f UNUSED)
         break;
     }
 
+    case SYS_EXEC:
+    {
+        f->R.rax = syscall_exec(f->R.rdi);
+        break;
+    }
+
     default:
         return -1;
     }
 }
+
+static int syscall_exec(char *filename)
+{
+
+    check_address(filename);
+
+    char *fn_copy = palloc_get_page(0); // copy해야하는 이유 제대로알기
+    if (fn_copy == NULL)
+        exit(-1);
+
+    if (!copy_user_string(fn_copy, filename, PGSIZE))
+    {
+        palloc_free_page(fn_copy);
+        exit(-1);
+    }
+    if (process_exec(fn_copy) == -1)
+    {
+        exit(-1);
+    }
+}
+
 static int wait(int tid)
 {
     return process_wait(tid);
@@ -348,27 +377,45 @@ static void check_address(const void *addr)
     }
 }
 
-// static void copy_in(void *dst, const void *uaddr, size_t size)
-// {
-//     uint8_t *kd = dst;
-//     const uint8_t *us = uaddr;
+static void copy_in(void *dst, const void *uaddr, size_t size)
+{
+    uint8_t *kd = dst;
+    const uint8_t *us = uaddr;
 
-//     while (size > 0)
-//     {
-//         if (us == NULL || !is_user_vaddr(us))
-//             exit(-1);
+    while (size > 0)
+    {
+        if (us == NULL || !is_user_vaddr(us))
+            exit(-1);
 
-//         void *kpage = pml4_get_page(thread_current()->pml4,
-//         pg_round_down(us)); if (kpage == NULL)
-//             exit(-1);
+        void *kpage = pml4_get_page(thread_current()->pml4, pg_round_down(us));
+        if (kpage == NULL)
+            exit(-1);
 
-//         size_t page_left = PGSIZE - pg_ofs(us);
-//         size_t n = size < page_left ? size : page_left;
+        size_t page_left = PGSIZE - pg_ofs(us);
+        size_t n = size < page_left ? size : page_left;
 
-//         memcpy(kd, (uint8_t *)kpage + pg_ofs(us), n);
+        memcpy(kd, (uint8_t *)kpage + pg_ofs(us), n);
 
-//         kd += n;
-//         us += n;
-//         size -= n;
-//     }
-// }
+        kd += n;
+        us += n;
+        size -= n;
+    }
+}
+
+bool copy_user_string(char *dst, const char *src, size_t max_len)
+{
+    for (size_t i = 0; i < max_len; i++)
+    {
+        /* 매 바이트 접근 전에 해당 주소가 사용자 영역인지 검사한다. */
+        check_address(src + i);
+        char c = src[i];
+        dst[i] = c;
+        /* NULL 문자를 만났다면 복사가 완료된 것. */
+        if (c == '\0')
+        {
+            return true;
+        }
+    }
+    /* 문자열이 최대 허용 길이 안에서 끝나지 않았음. */
+    return false;
+}

@@ -26,7 +26,9 @@
         "interrupt.h": "c",
         "file.h": "c",
         "intrinsic.h": "c",
-        "synch.h": "c"
+        "synch.h": "c",
+        "init.h": "c",
+        "palloc.h": "c"
     },
 
     "C_Cpp.clang_format_style": "file",
