@@ -331,6 +331,11 @@ struct thread *find_child(struct list *list, tid_t tid)
 void process_exit(void)
 {
     struct thread *curr = thread_current();
+    if (curr->exec_file != NULL)
+    {
+        file_close(curr->exec_file);
+        curr->exec_file = NULL;
+    }
     if (curr->p_tid != NULL)
     {
         sema_up(&curr->wait_sema);   // 부모다시시작해라
@@ -543,7 +548,15 @@ static bool load(const char *file_name, struct intr_frame *if_) // echo 1 2
         }
     }
 
+    file_deny_write(file); // 파일쓰기거부
+
+    /* inode 프린트 디버깅 코드 */
+    struct inode *inode = file_get_inode(file);
+    int deny_cnt = inode_get_deny_cnt(inode);
+    // printf("inode addr = %p deny_cnt = %d\n", inode,
+    // inode_get_deny_cnt(inode));
     /* Set up stack. */
+
     if (!setup_stack(if_))
         goto done;
 
@@ -553,10 +566,11 @@ static bool load(const char *file_name, struct intr_frame *if_) // echo 1 2
     setup_stack_args(if_, addr, argc);
 
     success = true;
+    t->exec_file = file;
     // print_dump(if_, 128);
 done:
     /* We arrive here whether the load is successful or not. */
-    file_close(file);
+    // file_close(file);
     return success;
 }
 

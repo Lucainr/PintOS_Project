@@ -127,6 +127,9 @@ struct thread
     struct list fd_list; // 리스트형 fd구조체
     int next_fd;         // 다음할당fd(속도최적화)
 
+    /* 실행중인파일 저장 */
+    struct file *exec_file;
+
 #ifdef USERPROG
     /* Owned by userprog/process.c. */
     uint64_t *pml4; /* Page map level 4 */

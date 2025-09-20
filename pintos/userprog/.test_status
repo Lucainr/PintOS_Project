@@ -1,6 +1,6 @@
 exec-bad-ptr PASS
 sm-full PASS
-rox-simple FAIL
+rox-simple PASS
 fork-multiple PASS
 args-dbl-space PASS
 read-bad-fd PASS
@@ -39,7 +39,7 @@ open-null PASS
 sm-seq-random PASS
 bad-write2 PASS
 sm-seq-block PASS
-multi-recurse FAIL
+multi-recurse PASS
 alarm-priority PASS
 close-twice PASS
 args-none PASS
@@ -94,4 +94,4 @@ args-single PASS
 write-stdin PASS
 read-zero PASS
 bad-read2 PASS
-syn-read FAIL
+syn-read PASS

@@ -6,7 +6,6 @@
 #include <stdbool.h>
 
 struct bitmap;
-
 void inode_init(void);
 bool inode_create(disk_sector_t, off_t);
 struct inode *inode_open(disk_sector_t);
@@ -19,5 +18,6 @@ off_t inode_write_at(struct inode *, const void *, off_t size, off_t offset);
 void inode_deny_write(struct inode *);
 void inode_allow_write(struct inode *);
 off_t inode_length(const struct inode *);
+int inode_get_deny_cnt(struct inode *);
 
 #endif /* filesys/inode.h */

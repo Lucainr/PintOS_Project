@@ -28,7 +28,14 @@
         "intrinsic.h": "c",
         "synch.h": "c",
         "init.h": "c",
-        "palloc.h": "c"
+        "palloc.h": "c",
+        "exception": "c",
+        "memory_resource": "c",
+        "new": "c",
+        "ostream": "c",
+        "inode.h": "c",
+        "off_t.h": "c",
+        "disk.h": "c"
     },
 
     "C_Cpp.clang_format_style": "file",

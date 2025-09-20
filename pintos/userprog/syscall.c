@@ -1,5 +1,7 @@
 #include "userprog/syscall.h"
+#include "filesys/file.h" // file
 #include "filesys/filesys.h"
+#include "filesys/inode.h" // inode
 #include "intrinsic.h"
 #include "threads/flags.h"
 #include "threads/init.h" // power_off
@@ -329,6 +331,16 @@ static off_t write(int fd, const void *buffer, off_t size)
         exit(-1);
     }
     struct file_descriptor *fd_s = find_fd_s(&cur_th->fd_list, fd);
+    struct file *file = fd_s->file;
+    struct inode *inode = file_get_inode(file);
+    int deny_cnt = inode_get_deny_cnt(inode);
+    // printf("inode addr = %p deny_cnt = %d\n", inode,
+    // inode_get_deny_cnt(inode));
+    if (deny_cnt > 0) // true 무시
+    {
+        return 0;
+    }
+
     if (fd_s == NULL)
     {
         exit(-1);

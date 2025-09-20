@@ -4,12 +4,12 @@
 #include <debug.h>
 
 /* An open file. */
-struct file
-{
-    struct inode *inode; /* File's inode. */
-    off_t pos;           /* Current position. */
-    bool deny_write;     /* Has file_deny_write() been called? */
-};
+// struct file
+// {
+//     struct inode *inode; /* File's inode. */
+//     off_t pos;           /* Current position. */
+//     bool deny_write;     /* Has file_deny_write() been called? */
+// };
 
 /* Opens a file for the given INODE, of which it takes ownership,
  * and returns the new file.  Returns a null pointer if an
