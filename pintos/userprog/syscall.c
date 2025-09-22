@@ -38,7 +38,8 @@ static off_t write(int fd, const void *buffer, off_t size);
 static int wait(int tid);
 void exit(int status);
 static int syscall_exec(char *filename);
-
+static unsigned syscall_tell(int fd);
+static bool syscall_seek(int fd, off_t pos);
 /* System call.
  *
  * Previously system call services was handled by the interrupt handler

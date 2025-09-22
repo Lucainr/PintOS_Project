@@ -225,17 +225,18 @@ error:
 static bool cpy_fd_table(struct thread *p_th, struct thread *c_th)
 {
     struct list_elem *e;
+    /* 1. 부모의 fd_list를 순회 */
     for (e = list_begin(&p_th->fd_list); e != list_end(&p_th->fd_list);
-         e = list_next(e)) // 부모의 fd_list를 순회
+         e = list_next(e))
     {
-        /* 부모의 fd데이터 새로운 자식의 fd */
+        /* 2. 부모의 fd데이터 새로운 자식의 fd */
         struct file_descriptor *fd_s =
             list_entry(e, struct file_descriptor, elem);
         struct file_descriptor *nfd_s = malloc(sizeof(struct file_descriptor));
         if (nfd_s == NULL)
             return false;
 
-        /* 자식 fd구조체에 할당 */
+        /* 3. 자식 fd구조체에 할당 */
         nfd_s->fd = fd_s->fd;
         nfd_s->file = file_duplicate(fd_s->file);
         if (nfd_s->file == NULL)
@@ -243,7 +244,7 @@ static bool cpy_fd_table(struct thread *p_th, struct thread *c_th)
             free(nfd_s);
             return false;
         }
-
+        /* 4. 자식 스레드에 삽입 */
         list_push_back(&c_th->fd_list, &nfd_s->elem);
     }
     c_th->next_fd = p_th->next_fd;
