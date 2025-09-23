@@ -23,7 +23,7 @@
 bool copy_user_string(char *dst, const char *src, size_t max_len);
 void syscall_entry(void);
 void syscall_handler(struct intr_frame *);
-bool create(const char *name, off_t initial_size);
+bool syscall_create(const char *name, off_t initial_size);
 static int open(const char *name);
 static void close(int fd);
 static off_t read(int fd, void *buffer, off_t size);
@@ -85,7 +85,7 @@ void syscall_handler(struct intr_frame *f UNUSED)
     case SYS_CREATE:
     { // rdi file, rsi size
 
-        f->R.rax = create(f->R.rdi, f->R.rsi);
+        f->R.rax = syscall_create(f->R.rdi, f->R.rsi);
         // 모든 반환형이 있는 시스템콜은 rax에 채워줘야한다.
         break;
     }
@@ -255,10 +255,11 @@ void exit(int status)
     thread_exit();
 }
 
-bool create(const char *name, off_t initial_size)
+bool syscall_create(const char *name, off_t initial_size)
 {
+    /* 1.*/
     check_address(name);
-    bool result; // 결과값 저장
+    bool result;
     if (name == NULL)
         return false;
     if (strlen(name) < 1 || strlen(name) > FILE_NAME_MAX)
