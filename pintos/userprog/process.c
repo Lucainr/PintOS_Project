@@ -25,13 +25,12 @@
 #include "vm/vm.h"
 #endif
 
-
 #define MAX_ARGS 128
 
-static void process_cleanup (void);
-static bool load (const char *file_name, struct intr_frame *if_);
-static void initd (void *f_name);
-static void __do_fork (void *);
+static void process_cleanup(void);
+static bool load(const char *file_name, struct intr_frame *if_);
+static void initd(void *f_name);
+static void __do_fork(void *);
 static int parse_args(char *, char *[]);
 static void argument_stack(char *argv[], int argc, struct intr_frame *_if);
 
@@ -45,21 +44,22 @@ extern bool thread_tests; /* threads/init.c 파일 안에서 정의되어 있다
 
 /* General process initializer for initd and other process. */
 static void
-process_init (void) {
+process_init(void)
+{
 	struct thread *current = thread_current();
 
 	// 새 프로세스용 파일 디스크립터 테이블을 0으로 초기화된 상태로 준비
-	current->FDT = palloc_get_multiple(PAL_ZERO, FDT_PAGES);	// 사용자 프로세스의 FDT를 0으로 초기화된 페이지로 확보
+	current->FDT = palloc_get_multiple(PAL_ZERO, FDT_PAGES); // 사용자 프로세스의 FDT를 0으로 초기화된 페이지로 확보
 
 	// 아직 실행 파일이 연결되지 않았으므로 기본값으로 비워둔다.
-	current->running_file = NULL;	// 현재 실행 파일 포인터 초기화
-	
+	current->running_file = NULL; // 현재 실행 파일 포인터 초기화
+
 	// 표준 입출력 0~2(stdin, stdout, stderr)를 건너뛰고, 일반 파일 fd는 3부터 할당한다.
-	current->next_FD = 3;	// 다음에 배정할 파일 디스크립터 시작값 지정
-	current->stdin_count = 1;	// 기본 STDIN 하나가 열려 있음을 표시
-	current->stdout_count = 1;	// 기본 STDOUT 하나가 열려 있음을 표시
-	current->FDT[STDIN_FILENO] = syscall_get_std_file(STDIN_FILENO);	// FDT[0]에 STDIN 더미 파일 객체 연결
-	current->FDT[STDOUT_FILENO] = syscall_get_std_file(STDOUT_FILENO);	// FDT[1]에 STDOUT 더미 파일 객체 연결
+	current->next_FD = 3;											   // 다음에 배정할 파일 디스크립터 시작값 지정
+	current->stdin_count = 1;										   // 기본 STDIN 하나가 열려 있음을 표시
+	current->stdout_count = 1;										   // 기본 STDOUT 하나가 열려 있음을 표시
+	current->FDT[STDIN_FILENO] = syscall_get_std_file(STDIN_FILENO);   // FDT[0]에 STDIN 더미 파일 객체 연결
+	current->FDT[STDOUT_FILENO] = syscall_get_std_file(STDOUT_FILENO); // FDT[1]에 STDOUT 더미 파일 객체 연결
 }
 
 /* FILE_NAME에서 불러온 "initd"라는 첫 번째 사용자 프로그램을 시작한다.
@@ -67,8 +67,8 @@ process_init (void) {
  * 스케줄될 수도 있고(심지어 종료될 수도 있다).
  * initd의 스레드 ID를 반환하며, 스레드를 생성할 수 없는 경우 TID_ERROR를 반환한다.
  * 참고: 이 함수는 반드시 한 번만 호출되어야 한다. */
-tid_t
-process_create_initd (const char *file_name) {
+tid_t process_create_initd(const char *file_name)
+{
 	char *fn_copy;
 	tid_t tid;
 
@@ -224,13 +224,13 @@ __do_fork(void *aux)
 	/* 새 스레드가 사용할 FDT, FD 인덱스 등 기본 자료구조를 초기화한다. */
 	process_init();
 	struct file *stdin_file = syscall_get_std_file(STDIN_FILENO);	// 부모와 동일한 STDIN 더미 포인터 캐싱
-	struct file *stdout_file = syscall_get_std_file(STDOUT_FILENO);	// 부모와 동일한 STDOUT 더미 포인터 캐싱
+	struct file *stdout_file = syscall_get_std_file(STDOUT_FILENO); // 부모와 동일한 STDOUT 더미 포인터 캐싱
 	for (int fd = 0; fd < MAX_FD; fd++)
 	{
-		current->FDT[fd] = NULL;	// 부모 상태를 그대로 채우기 위해 자식 FDT를 먼저 비워 둠
+		current->FDT[fd] = NULL; // 부모 상태를 그대로 채우기 위해 자식 FDT를 먼저 비워 둠
 	}
-	current->stdin_count = 0;	// 부모 복사를 통해 실제 STDIN 참조 개수를 다시 계산할 예정
-	current->stdout_count = 0;	// 부모 복사를 통해 실제 STDOUT 참조 개수를 다시 계산할 예정
+	current->stdin_count = 0;  // 부모 복사를 통해 실제 STDIN 참조 개수를 다시 계산할 예정
+	current->stdout_count = 0; // 부모 복사를 통해 실제 STDOUT 참조 개수를 다시 계산할 예정
 
 	/* 부모가 fork 시스템 콜을 호출하던 시점의 레지스터 값을 자식 intr_frame에 그대로 복사한다. */
 	memcpy(&if_, parent_if, sizeof(struct intr_frame));
@@ -280,21 +280,21 @@ __do_fork(void *aux)
 		struct file *parent_file = parent->FDT[fd];
 		if (parent_file == NULL)
 		{
-			continue;	// 부모가 사용하지 않은 슬롯은 넘긴다
+			continue; // 부모가 사용하지 않은 슬롯은 넘긴다
 		}
 		if (parent_file == stdin_file)
 		{
-			current->FDT[fd] = stdin_file;	// STDIN 더미 포인터 공유
-			current->stdin_count++;	// 자식이 보유한 STDIN 참조 수 누적
+			current->FDT[fd] = stdin_file; // STDIN 더미 포인터 공유
+			current->stdin_count++;		   // 자식이 보유한 STDIN 참조 수 누적
 			continue;
 		}
 		if (parent_file == stdout_file)
 		{
-			current->FDT[fd] = stdout_file;	// STDOUT 더미 포인터 공유
-			current->stdout_count++;	// 자식이 보유한 STDOUT 참조 수 누적
+			current->FDT[fd] = stdout_file; // STDOUT 더미 포인터 공유
+			current->stdout_count++;		// 자식이 보유한 STDOUT 참조 수 누적
 			continue;
 		}
-		current->FDT[fd] = file_duplicate(parent_file);	// 일반 파일은 별도 file 객체를 만들어 부모와 파일 오프셋이 섞이지 않도록 함
+		current->FDT[fd] = file_duplicate(parent_file); // 일반 파일은 별도 file 객체를 만들어 부모와 파일 오프셋이 섞이지 않도록 함
 		if (current->FDT[fd] == NULL)
 		{
 			succ = false;
@@ -436,7 +436,7 @@ void process_exit(void)
 		{
 			if (current_thread->FDT[fd] != NULL)
 			{
-				syscall_close(fd);	// dup_count와 STDIN/STDOUT 카운트를 반영하며 안전하게 닫기
+				syscall_close(fd); // dup_count와 STDIN/STDOUT 카운트를 반영하며 안전하게 닫기
 			}
 		}
 		// 파일 디스크럽터 테이블에 할당했던 메모리 해제
@@ -933,16 +933,16 @@ int process_add_file(struct file *file)
 
 struct file *process_get_file(int fd)
 {
-	struct thread *current_thread = thread_current();	// 현재 실행 중인 스레드 포인터 획득
+	struct thread *current_thread = thread_current(); // 현재 실행 중인 스레드 포인터 획득
 	if (current_thread->FDT == NULL)
 	{
-		return NULL;	// FDT가 아직 준비되지 않았다면 접근할 수 있는 파일이 없음
+		return NULL; // FDT가 아직 준비되지 않았다면 접근할 수 있는 파일이 없음
 	}
 	if (fd < 0 || fd >= MAX_FD)
 	{
-		return NULL;	// 허용 범위를 벗어난 파일 디스크립터는 무효로 간주
+		return NULL; // 허용 범위를 벗어난 파일 디스크립터는 무효로 간주
 	}
-	return current_thread->FDT[fd];	// 유효한 fd라면 FDT에서 대응되는 파일 포인터 반환
+	return current_thread->FDT[fd]; // 유효한 fd라면 FDT에서 대응되는 파일 포인터 반환
 }
 
 /* Adds a mapping from user virtual address UPAGE to kernel

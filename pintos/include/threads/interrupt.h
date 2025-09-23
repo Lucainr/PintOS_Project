@@ -5,18 +5,20 @@
 #include <stdint.h>
 
 /* Interrupts on or off? */
-enum intr_level {
-	INTR_OFF,             /* Interrupts disabled. */
-	INTR_ON               /* Interrupts enabled. */
+enum intr_level
+{
+	INTR_OFF, /* Interrupts disabled. */
+	INTR_ON	  /* Interrupts enabled. */
 };
 
-enum intr_level intr_get_level (void);
-enum intr_level intr_set_level (enum intr_level);
-enum intr_level intr_enable (void);
-enum intr_level intr_disable (void);
+enum intr_level intr_get_level(void);
+enum intr_level intr_set_level(enum intr_level);
+enum intr_level intr_enable(void);
+enum intr_level intr_disable(void);
 
 /* Interrupt stack frame. */
-struct gp_registers {
+struct gp_registers
+{
 	uint64_t r15;
 	uint64_t r14;
 	uint64_t r13;
@@ -35,7 +37,8 @@ struct gp_registers {
 } __attribute__((packed));
 
 /* 인터럽트나 예외가 발생했을 때 CPU가 자동으로 저장하는 레지스터 값들을 담아두는 구조체 */
-struct intr_frame {
+struct intr_frame
+{
 	/* Pushed by intr_entry in intr-stubs.S.
 	   These are the interrupted task's saved registers. */
 	struct gp_registers R;
@@ -47,12 +50,12 @@ struct intr_frame {
 	uint32_t __pad4;
 	/* Pushed by intrNN_stub in intr-stubs.S. */
 	uint64_t vec_no; /* Interrupt vector number. */
-/* Sometimes pushed by the CPU,
-   otherwise for consistency pushed as 0 by intrNN_stub.
-   The CPU puts it just under `eip', but we move it here. */
+					 /* Sometimes pushed by the CPU,
+						otherwise for consistency pushed as 0 by intrNN_stub.
+						The CPU puts it just under `eip', but we move it here. */
 	uint64_t error_code;
-/* Pushed by the CPU.
-   These are the interrupted task's saved registers. */
+	/* Pushed by the CPU.
+	   These are the interrupted task's saved registers. */
 	uintptr_t rip;
 	uint16_t cs;
 	uint16_t __pad5;
@@ -64,16 +67,16 @@ struct intr_frame {
 	uint32_t __pad8;
 } __attribute__((packed));
 
-typedef void intr_handler_func (struct intr_frame *);
+typedef void intr_handler_func(struct intr_frame *);
 
-void intr_init (void);
-void intr_register_ext (uint8_t vec, intr_handler_func *, const char *name);
-void intr_register_int (uint8_t vec, int dpl, enum intr_level,
-                        intr_handler_func *, const char *name);
-bool intr_context (void);
-void intr_yield_on_return (void);
+void intr_init(void);
+void intr_register_ext(uint8_t vec, intr_handler_func *, const char *name);
+void intr_register_int(uint8_t vec, int dpl, enum intr_level,
+					   intr_handler_func *, const char *name);
+bool intr_context(void);
+void intr_yield_on_return(void);
 
-void intr_dump_frame (const struct intr_frame *);
-const char *intr_name (uint8_t vec);
+void intr_dump_frame(const struct intr_frame *);
+const char *intr_name(uint8_t vec);
 
 #endif /* threads/interrupt.h */
