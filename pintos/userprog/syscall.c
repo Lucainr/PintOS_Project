@@ -20,12 +20,6 @@
 #include <syscall-nr.h>
 #include <userprog/process.h>
 
-// struct file_descriptor
-// {
-//     int fd;
-//     struct file *file;
-//     struct list_elem elem;
-// };
 bool copy_user_string(char *dst, const char *src, size_t max_len);
 void syscall_entry(void);
 void syscall_handler(struct intr_frame *);
@@ -35,7 +29,7 @@ static void close(int fd);
 static off_t read(int fd, void *buffer, off_t size);
 static int filesize(int fd);
 static off_t write(int fd, const void *buffer, off_t size);
-static int wait(int tid);
+static int syscall_wait(int tid);
 void exit(int status);
 static int syscall_exec(char *filename);
 static unsigned syscall_tell(int fd);
@@ -167,7 +161,7 @@ void syscall_handler(struct intr_frame *f UNUSED)
     }
     case SYS_WAIT:
     {
-        f->R.rax = wait(f->R.rdi);
+        f->R.rax = syscall_wait(f->R.rdi);
         break;
     }
     case SYS_EXIT:
@@ -244,7 +238,7 @@ static int syscall_exec(char *filename)
     }
 }
 
-static int wait(int tid)
+static int syscall_wait(int tid)
 {
     return process_wait(tid);
 }

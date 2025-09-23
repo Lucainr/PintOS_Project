@@ -258,60 +258,49 @@ int process_exec(void *f_name)
     char *file_name = f_name;
     bool success;
 
-    /* We cannot use the intr_frame in the thread structure.
-     * This is because when current thread rescheduled,
-     * it stores the execution information to the member. */
+    /* 1. 인터럽트 프레임 생성 */
     struct intr_frame _if;
     _if.ds = _if.es = _if.ss = SEL_UDSEG;
     _if.cs = SEL_UCSEG;
     _if.eflags = FLAG_IF | FLAG_MBS;
 
-    /* We first kill the current context */
-    process_cleanup(); // 안에있는 옛 데이터 초기화
+    /* 2. 안에있는 옛 데이터 초기화 */
+    process_cleanup();
 
-    /* And then load the binary */
+    /* 3. 데이터 로드 */
     success = load(file_name, &_if);
     palloc_free_page(file_name);
     if (!success)
         return -1;
 
-    /* Start switched process. */
+    /* 4. 유저모드로 실행 */
     do_iret(&_if);
     NOT_REACHED();
 }
 
-/* Waits for thread TID to die and returns its exit status.  If
- * it was terminated by the kernel (i.e. killed due to an
- * exception), returns -1.  If TID is invalid or if it was not a
- * child of the calling process, or if process_wait() has already
- * been successfully called for the given TID, returns -1
- * immediately, without waiting.
- *
- * This function will be implemented in problem 2-2.  For now, it
- * does nothing. */
 int process_wait(tid_t child_tid)
 {
     if (thread_tests)
         return -1;
+    /* 현재 스레드 */
     struct thread *cur = thread_current();
 
     enum intr_level old_leve = intr_disable();
-    // 부모의 child_list에서 해당 자식 찾기
+    /* 2. 부모의 list에서 child 찾기 */
     struct thread *child = find_child(&cur->child_list, child_tid);
     intr_set_level(old_leve);
 
     if (!child)
         return -1; // 내 자식이 아님
 
-    // 자식 종료까지 대기
+    /* 3. wait lock 을 걸어 child가 신호를 줄때까지 대기 */
     sema_down(&child->wait_sema);
-
+    /* 4. child의 exit_status를 저장하고 삭제 */
     int status = child->exit_status;
     list_remove(&child->family_elem);
 
+    /* 5. child가 완전삭제될수 있도록 child 다시 실행(미리 멈춰놓음) */
     sema_up(&child->exit_sema);
-
-    // child_list에서 제거해서 다시 못 wait하게 함
 
     return status;
 }
