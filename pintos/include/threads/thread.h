@@ -134,6 +134,9 @@ struct thread {
 	struct file **FDT;			// File Descriptor Table
 	int next_FD;				// 다음 사용 가능한 fd값
 	struct file *running_file;	// 현재 프로세스에서 실행 중인 파일
+
+	int stdin_count;			// STDIN fd 개수
+	int stdout_count;			// STDOUT fd 개수
 #endif
 #ifdef VM
 	/* Table for whole virtual memory owned by thread. */
