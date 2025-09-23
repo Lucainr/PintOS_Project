@@ -241,6 +241,7 @@ int syscall_exec(char *filename)
     /* 3. 프로그램 실행 */
     if (process_exec(fn_copy) == -1)
     {
+        palloc_free_page(fn_copy);
         syscall_exit(-1);
     }
 }
@@ -330,25 +331,25 @@ void close(int fd)
     file_close(fd_s->file); // file객체, inode 참조해제
     lock_release(&filesyslock);
 
-    free(fd_s); // 파일디스크립터 객체 삭제
+    free(fd_s); // 파일디스크립터 객체 해제
 }
 
 off_t read(int fd, void *buffer, off_t size)
 {
     if (size == 0)
-        return 0;
+        return -1;
     check_address(buffer);
     check_address(buffer + size - 1);
 
     struct thread *cur_th = thread_current();
     if (cur_th->next_fd < fd)
     {
-        syscall_exit(-1);
+        return -1;
     }
     struct file_descriptor *fd_s = find_fd_s(&cur_th->fd_list, fd);
     if (fd_s == NULL)
     {
-        syscall_exit(-1);
+        return -1;
     }
 
     lock_acquire(&filesyslock);
@@ -368,14 +369,12 @@ off_t write(int fd, const void *buffer, off_t size)
     struct thread *cur_th = thread_current();
     if (cur_th->next_fd < fd)
     {
-        syscall_exit(-1);
+        return -1;
     }
     struct file_descriptor *fd_s = find_fd_s(&cur_th->fd_list, fd);
     struct file *file = fd_s->file;
     struct inode *inode = file_get_inode(file);
     int deny_cnt = inode_get_deny_cnt(inode);
-    // printf("inode addr = %p deny_cnt = %d\n", inode,
-    // inode_get_deny_cnt(inode));
     if (deny_cnt > 0) // true 무시
     {
         return 0;
@@ -383,7 +382,7 @@ off_t write(int fd, const void *buffer, off_t size)
 
     if (fd_s == NULL)
     {
-        syscall_exit(-1);
+        return -1;
     }
 
     lock_acquire(&filesyslock);
