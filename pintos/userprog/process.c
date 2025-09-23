@@ -212,14 +212,12 @@ static void __do_fork(void *aux)
     arg->success = succ;
     sema_up(&arg->done);
     /* Finally, switch to the newly created process. */
-    if (succ)
-        do_iret(&if_);
+    do_iret(&if_);
 error:
-    if (!succ)
-    {
-        arg->success = succ;
-        sema_up(&arg->done);
-    }
+    /* 5. 만약 실패하더라도 결과 통지 */
+    arg->success = succ;
+    sema_up(&arg->done);
+
     thread_exit();
 }
 static bool cpy_fd_table(struct thread *p_th, struct thread *c_th)

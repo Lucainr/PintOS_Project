@@ -30,6 +30,7 @@ static off_t read(int fd, void *buffer, off_t size);
 static int filesize(int fd);
 static off_t write(int fd, const void *buffer, off_t size);
 static int syscall_wait(int tid);
+static bool syscall_remove(char *filename);
 void exit(int status);
 static int syscall_exec(char *filename);
 static unsigned syscall_tell(int fd);
@@ -190,6 +191,14 @@ void syscall_handler(struct intr_frame *f UNUSED)
         break;
     }
 
+    case SYS_REMOVE:
+    {
+        // {    return syscall1(SYS_REMOVE, file);
+
+        f->R.rax = syscall_remove(f->R.rdi);
+        break;
+    }
+
     default:
         return -1;
     }
@@ -203,6 +212,12 @@ static unsigned syscall_tell(int fd)
         exit(-1);
     }
     return file_tell(fd_s->file);
+}
+
+static bool syscall_remove(char *filename)
+{
+    check_address(filename);
+    return filesys_remove(filename);
 }
 
 static bool syscall_seek(int fd, off_t pos)
