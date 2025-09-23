@@ -14,7 +14,7 @@ void test_main(void)
     int handle;
     int byte_cnt;
     char *buffer;
-
+    // 여기서 리턴값에 따라 달라지는지?
     CHECK((handle = open("sample.txt")) > 1, "open \"sample.txt\"");
 
     if ((pid = fork("child")))

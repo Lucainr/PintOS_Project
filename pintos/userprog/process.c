@@ -324,11 +324,14 @@ void process_exit(void)
         file_close(curr->exec_file);
         curr->exec_file = NULL;
     }
+    remove_all_fd_s(&curr->fd_list);
+
     if (curr->p_tid != NULL)
     {
         sema_up(&curr->wait_sema);   // 부모다시시작해라
         sema_down(&curr->exit_sema); // 부모가 프린트찍을때까진 있어라
     }
+    // malloc 한것들 정리
     process_cleanup();
 }
 
@@ -539,17 +542,15 @@ static bool load(const char *file_name, struct intr_frame *if_) // echo 1 2
     if (!setup_stack(if_))
         goto done;
 
-    /* Start address. */
+    /* 유저스택 상단. */
     if_->rip = ehdr.e_entry;
 
+    /* 스택에 인자 저장 */
     setup_stack_args(if_, addr, argc);
 
     success = true;
     t->exec_file = file;
-    // print_dump(if_, 128);
 done:
-    /* We arrive here whether the load is successful or not. */
-    // file_close(file);
     return success;
 }
 

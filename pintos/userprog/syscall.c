@@ -337,7 +337,7 @@ void close(int fd)
 off_t read(int fd, void *buffer, off_t size)
 {
     if (size == 0)
-        return -1;
+        return -0;
     check_address(buffer);
     check_address(buffer + size - 1);
 
@@ -360,11 +360,11 @@ off_t read(int fd, void *buffer, off_t size)
 
 off_t write(int fd, const void *buffer, off_t size)
 { // buffer에 있는것을 fd에 쓴다.
-    if (size == 0)
-        return 0;
 
     check_address(buffer);            // 버퍼의 맨앞, 여기처리 꼭해야하는지?
     check_address(buffer + size - 1); // 버퍼의 맨뒤
+    if (size == 0)
+        return 0;
 
     struct thread *cur_th = thread_current();
     if (cur_th->next_fd < fd)
@@ -372,6 +372,8 @@ off_t write(int fd, const void *buffer, off_t size)
         return -1;
     }
     struct file_descriptor *fd_s = find_fd_s(&cur_th->fd_list, fd);
+    if (fd_s == NULL)
+        return -1;
     struct file *file = fd_s->file;
     struct inode *inode = file_get_inode(file);
     int deny_cnt = inode_get_deny_cnt(inode);
@@ -469,4 +471,17 @@ static bool copy_user_string(char *dst, const char *src, size_t max_len)
     }
     /* 문자열이 최대 허용 길이 안에서 끝나지 않았음. */
     return false;
+}
+
+void remove_all_fd_s(struct list *list)
+{
+    struct list_elem *e = list_begin(list);
+    while (e != list_end(list))
+    {
+        struct file_descriptor *fd_s =
+            list_entry(e, struct file_descriptor, elem);
+        e = list_remove(e);     // 다음 요소 위치를 반환받음
+        file_close(fd_s->file); // 열린 파일 닫기
+        free(fd_s);             // 구조체 메모리 해제
+    }
 }

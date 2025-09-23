@@ -15,6 +15,7 @@ void syscall_exit(int status);
 int syscall_exec(char *filename);
 unsigned syscall_tell(int fd);
 bool syscall_seek(int fd, off_t pos);
+void remove_all_fd_s(struct list *list);
 
 struct file_descriptor
 {
