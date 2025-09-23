@@ -257,14 +257,15 @@ void exit(int status)
 
 bool syscall_create(const char *name, off_t initial_size)
 {
-    /* 1.*/
+    /* 1. name 포인터체크 */
     check_address(name);
-    bool result;
+    bool result; // 결과를 저장
     if (name == NULL)
         return false;
     if (strlen(name) < 1 || strlen(name) > FILE_NAME_MAX)
         return false;
 
+    /* 2. filesystem은 접근 1번만 */
     lock_acquire(&filesyslock);
     result = filesys_create(name, initial_size);
     lock_release(&filesyslock);
