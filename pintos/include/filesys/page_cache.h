@@ -5,10 +5,8 @@
 struct page;
 enum vm_type;
 
-struct page_cache
-{
-};
+struct page_cache {};
 
-void page_cache_init(void);
-bool page_cache_initializer(struct page *page, enum vm_type type, void *kva);
+void page_cache_init (void);
+bool page_cache_initializer (struct page *page, enum vm_type type, void *kva);
 #endif

@@ -1,11 +1,11 @@
 #include "userprog/tss.h"
-#include "intrinsic.h"
-#include "threads/palloc.h"
-#include "threads/thread.h"
-#include "threads/vaddr.h"
-#include "userprog/gdt.h"
 #include <debug.h>
 #include <stddef.h>
+#include "userprog/gdt.h"
+#include "threads/thread.h"
+#include "threads/palloc.h"
+#include "threads/vaddr.h"
+#include "intrinsic.h"
 
 /* The Task-State Segment (TSS).
  *
@@ -49,26 +49,26 @@
 struct task_state *tss;
 
 /* Initializes the kernel TSS. */
-void tss_init(void)
-{
-    /* Our TSS is never used in a call gate or task gate, so only a
-     * few fields of it are ever referenced, and those are the only
-     * ones we initialize. */
-    tss = palloc_get_page(PAL_ASSERT | PAL_ZERO);
-    tss_update(thread_current());
+void
+tss_init (void) {
+	/* Our TSS is never used in a call gate or task gate, so only a
+	 * few fields of it are ever referenced, and those are the only
+	 * ones we initialize. */
+	tss = palloc_get_page (PAL_ASSERT | PAL_ZERO);
+	tss_update (thread_current ());
 }
 
 /* Returns the kernel TSS. */
-struct task_state *tss_get(void)
-{
-    ASSERT(tss != NULL);
-    return tss;
+struct task_state *
+tss_get (void) {
+	ASSERT (tss != NULL);
+	return tss;
 }
 
 /* Sets the ring 0 stack pointer in the TSS to point to the end
  * of the thread stack. */
-void tss_update(struct thread *next)
-{
-    ASSERT(tss != NULL);
-    tss->rsp0 = (uint64_t)next + PGSIZE;
+void
+tss_update (struct thread *next) {
+	ASSERT (tss != NULL);
+	tss->rsp0 = (uint64_t) next + PGSIZE;
 }
