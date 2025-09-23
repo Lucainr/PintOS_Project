@@ -20,21 +20,9 @@
 #include <syscall-nr.h>
 #include <userprog/process.h>
 
-bool copy_user_string(char *dst, const char *src, size_t max_len);
 void syscall_entry(void);
 void syscall_handler(struct intr_frame *);
-bool syscall_create(const char *name, off_t initial_size);
-static int open(const char *name);
-static void close(int fd);
-static off_t read(int fd, void *buffer, off_t size);
-static int filesize(int fd);
-static off_t write(int fd, const void *buffer, off_t size);
-static int syscall_wait(int tid);
-static bool syscall_remove(char *filename);
-void exit(int status);
-static int syscall_exec(char *filename);
-static unsigned syscall_tell(int fd);
-static bool syscall_seek(int fd, off_t pos);
+
 /* System call.
  *
  * Previously system call services was handled by the interrupt handler
@@ -53,6 +41,7 @@ static struct lock filesyslock;
 static void check_address(const void *addr);
 static struct file_descriptor *find_fd_s(struct list *list, int fd);
 static void copy_in(void *dst, const void *uaddr, size_t size);
+static bool copy_user_string(char *dst, const char *src, size_t max_len);
 
 void syscall_init(void)
 {
@@ -168,7 +157,7 @@ void syscall_handler(struct intr_frame *f UNUSED)
     case SYS_EXIT:
     {
         int status = (int)f->R.rdi;
-        exit(status);
+        syscall_exit(status);
         break;
     }
 
@@ -203,24 +192,24 @@ void syscall_handler(struct intr_frame *f UNUSED)
         return -1;
     }
 }
-static unsigned syscall_tell(int fd)
+unsigned syscall_tell(int fd)
 {
     struct thread *curr_th = thread_current();
     struct file_descriptor *fd_s = find_fd_s(&curr_th->fd_list, fd);
     if (fd_s == NULL)
     {
-        exit(-1);
+        syscall_exit(-1);
     }
     return file_tell(fd_s->file);
 }
 
-static bool syscall_remove(char *filename)
+bool syscall_remove(char *filename)
 {
     check_address(filename);
     return filesys_remove(filename);
 }
 
-static bool syscall_seek(int fd, off_t pos)
+bool syscall_seek(int fd, off_t pos)
 {
     struct thread *curr_th = thread_current();
     struct file_descriptor *fd_s = find_fd_s(&curr_th->fd_list, fd);
@@ -233,32 +222,35 @@ static bool syscall_seek(int fd, off_t pos)
     return true;
 }
 
-static int syscall_exec(char *filename)
+int syscall_exec(char *filename)
 {
 
     check_address(filename);
 
-    char *fn_copy = palloc_get_page(0); // copy해야하는 이유 제대로알기
+    /* 1. 메모리 새로 생성 */
+    char *fn_copy = palloc_get_page(0);
     if (fn_copy == NULL)
-        exit(-1);
+        syscall_exit(-1);
 
+    /* 2. filename 카피*/
     if (!copy_user_string(fn_copy, filename, PGSIZE))
     {
         palloc_free_page(fn_copy);
-        exit(-1);
+        syscall_exit(-1);
     }
+    /* 3. 프로그램 실행 */
     if (process_exec(fn_copy) == -1)
     {
-        exit(-1);
+        syscall_exit(-1);
     }
 }
 
-static int syscall_wait(int tid)
+int syscall_wait(int tid)
 {
     return process_wait(tid);
 }
 
-void exit(int status)
+void syscall_exit(int status)
 {
     struct thread *cur = thread_current();
     cur->exit_status = status;
@@ -288,12 +280,12 @@ bool syscall_create(const char *name, off_t initial_size)
     return result;
 }
 
-static pid_t fork(char *thread_name, struct intr_frame *if_)
+pid_t fork(char *thread_name, struct intr_frame *if_)
 {
     return process_fork(thread_name, if_);
 }
 
-static int open(const char *name)
+int open(const char *name)
 {
     check_address(name);
     if (strlen(name) < 1 || strlen(name) > FILE_NAME_MAX)
@@ -319,7 +311,7 @@ static int open(const char *name)
     return result;
 }
 
-static void close(int fd)
+void close(int fd)
 {
     if (fd < 2)
         return;
@@ -341,7 +333,7 @@ static void close(int fd)
     free(fd_s); // 파일디스크립터 객체 삭제
 }
 
-static off_t read(int fd, void *buffer, off_t size)
+off_t read(int fd, void *buffer, off_t size)
 {
     if (size == 0)
         return 0;
@@ -351,12 +343,12 @@ static off_t read(int fd, void *buffer, off_t size)
     struct thread *cur_th = thread_current();
     if (cur_th->next_fd < fd)
     {
-        exit(-1);
+        syscall_exit(-1);
     }
     struct file_descriptor *fd_s = find_fd_s(&cur_th->fd_list, fd);
     if (fd_s == NULL)
     {
-        exit(-1);
+        syscall_exit(-1);
     }
 
     lock_acquire(&filesyslock);
@@ -365,7 +357,7 @@ static off_t read(int fd, void *buffer, off_t size)
     return result;
 }
 
-static off_t write(int fd, const void *buffer, off_t size)
+off_t write(int fd, const void *buffer, off_t size)
 { // buffer에 있는것을 fd에 쓴다.
     if (size == 0)
         return 0;
@@ -376,7 +368,7 @@ static off_t write(int fd, const void *buffer, off_t size)
     struct thread *cur_th = thread_current();
     if (cur_th->next_fd < fd)
     {
-        exit(-1);
+        syscall_exit(-1);
     }
     struct file_descriptor *fd_s = find_fd_s(&cur_th->fd_list, fd);
     struct file *file = fd_s->file;
@@ -391,7 +383,7 @@ static off_t write(int fd, const void *buffer, off_t size)
 
     if (fd_s == NULL)
     {
-        exit(-1);
+        syscall_exit(-1);
     }
 
     lock_acquire(&filesyslock);
@@ -400,7 +392,7 @@ static off_t write(int fd, const void *buffer, off_t size)
     return result;
 }
 
-static int filesize(int fd)
+int filesize(int fd)
 {
     struct file_descriptor *fd_s = find_fd_s(&thread_current()->fd_list, fd);
     if (fd_s == NULL)
@@ -433,7 +425,7 @@ static void check_address(const void *addr)
     if (addr == NULL || !is_user_vaddr(addr) || // 커널주소라면 빠꾸!
         pml4_get_page(thread_current()->pml4, addr) == NULL)
     {
-        exit(-1); // 프로세스 강제 종료
+        syscall_exit(-1); // 프로세스 강제 종료
     }
 }
 
@@ -445,11 +437,11 @@ static void copy_in(void *dst, const void *uaddr, size_t size)
     while (size > 0)
     {
         if (us == NULL || !is_user_vaddr(us))
-            exit(-1);
+            syscall_exit(-1);
 
         void *kpage = pml4_get_page(thread_current()->pml4, pg_round_down(us));
         if (kpage == NULL)
-            exit(-1);
+            syscall_exit(-1);
 
         size_t page_left = PGSIZE - pg_ofs(us);
         size_t n = size < page_left ? size : page_left;
@@ -462,7 +454,7 @@ static void copy_in(void *dst, const void *uaddr, size_t size)
     }
 }
 
-bool copy_user_string(char *dst, const char *src, size_t max_len)
+static bool copy_user_string(char *dst, const char *src, size_t max_len)
 {
     for (size_t i = 0; i < max_len; i++)
     {

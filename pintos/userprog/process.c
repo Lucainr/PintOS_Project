@@ -269,7 +269,7 @@ int process_exec(void *f_name)
     success = load(file_name, &_if);
     palloc_free_page(file_name);
     if (!success)
-        return -1;
+        syscall_exit(-1);
 
     /* 4. 유저모드로 실행 */
     do_iret(&_if);
@@ -453,12 +453,10 @@ static bool load(const char *file_name, struct intr_frame *if_) // echo 1 2
         goto done;
     process_activate(thread_current());
 
+    /* 1. 인자파싱 */
     int argc = parse_args(file_name, addr);
 
-    // pintos는 실행된 스레드의 이름을 바꾸지 않음
-    // strlcpy(thread_current()->name, addr[0],
-    //         sizeof thread_current()->name);
-
+    /* 2. file_open */
     file = filesys_open(addr[0]);
     if (file == NULL)
     {
@@ -537,13 +535,6 @@ static bool load(const char *file_name, struct intr_frame *if_) // echo 1 2
     }
 
     file_deny_write(file); // 파일쓰기거부
-
-    /* inode 프린트 디버깅 코드 */
-    struct inode *inode = file_get_inode(file);
-    int deny_cnt = inode_get_deny_cnt(inode);
-    // printf("inode addr = %p deny_cnt = %d\n", inode,
-    // inode_get_deny_cnt(inode));
-    /* Set up stack. */
 
     if (!setup_stack(if_))
         goto done;
