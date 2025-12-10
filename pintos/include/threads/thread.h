@@ -123,6 +123,9 @@ struct thread
     struct list_elem family_elem; // 자신의형제순회 + 소속
     tid_t p_tid;                  // 부모의 tid
 
+    /* fork관련 */
+    int fork_status; // -1실패 0성공
+
     /* 파일디스크립터 멤버 */
     struct list fd_list; // 리스트형 fd구조체
     int next_fd;         // 다음할당fd(속도최적화)
@@ -135,6 +138,7 @@ struct thread
     uint64_t *pml4; /* Page map level 4 */
 #endif
 #ifdef VM
+    // 이거해야함
     /* Table for whole virtual memory owned by thread. */
     struct supplemental_page_table spt;
 #endif

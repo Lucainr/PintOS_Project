@@ -106,9 +106,22 @@ tid_t process_fork(const char *name, struct intr_frame *if_)
         free(aux);
         return TID_ERROR;
     }
+    struct thread *child = find_child(&thread_current()->child_list, tid);
+    if (child == NULL)
+    {
+        return TID_ERROR; // 리스트에서 찾지 못하면 실패로 간주 -1 return
+    }
 
     sema_down(&aux->done);
+
     tid_t result = aux->success ? tid : TID_ERROR;
+
+    if (child->fork_status != 0)
+    {
+        list_remove(&child->family_elem); // 부모 children 리스트에서 제거
+        sema_up(&child->exit_sema); // 자식이 종료 루틴을 마칠 수 있게 깨움
+        return TID_ERROR;
+    }
     free(aux);
     return result;
 }
@@ -210,12 +223,14 @@ static void __do_fork(void *aux)
 
     /* 4) 부모에게 결과 통지 */
     arg->success = succ;
+    current->fork_status = 0;
     sema_up(&arg->done);
     /* Finally, switch to the newly created process. */
     do_iret(&if_);
 error:
     /* 5. 만약 실패하더라도 결과 통지 */
     arg->success = succ;
+    current->fork_status = -1;
     sema_up(&arg->done);
 
     thread_exit();

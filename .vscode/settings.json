@@ -35,7 +35,9 @@
         "ostream": "c",
         "inode.h": "c",
         "off_t.h": "c",
-        "disk.h": "c"
+        "disk.h": "c",
+        "flags.h": "c",
+        "vaddr.h": "c"
     },
 
     "C_Cpp.clang_format_style": "file",

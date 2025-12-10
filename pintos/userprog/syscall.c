@@ -448,7 +448,6 @@ static void copy_in(void *dst, const void *uaddr, size_t size)
         size_t n = size < page_left ? size : page_left;
 
         memcpy(kd, (uint8_t *)kpage + pg_ofs(us), n);
-
         kd += n;
         us += n;
         size -= n;

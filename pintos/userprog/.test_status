@@ -65,7 +65,7 @@ fork-recursive PASS
 open-bad-ptr PASS
 write-normal PASS
 bad-read PASS
-multi-oom FAIL
+multi-oom PASS
 fork-once PASS
 priority-change PASS
 write-boundary PASS
